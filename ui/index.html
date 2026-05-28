@@ -852,8 +852,9 @@ async function escanearMultiple() {
   const urls = raw.split('\n').map(u=>u.trim()).filter(u=>u.startsWith('http'));
   if (!urls.length) { log('warn','⚠️ No se encontraron URLs válidas'); return; }
 
+  // FIX: leer el catálogo del campo correcto y validar que no esté vacío
   const cat = document.getElementById('inp-cat-url').value.trim();
-  if (!cat) { log('warn','⚠️ Selecciona un catálogo primero'); return; }
+  if (!cat) { log('warn','⚠️ Selecciona un catálogo antes de usar multi-URL'); return; }
 
   const progDiv = document.getElementById('multi-progreso');
   progDiv.style.display = 'block';
@@ -861,55 +862,73 @@ async function escanearMultiple() {
 
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
-    const nombreUrl = url.split('/').slice(-1)[0].replace(/[-_]/g,' ').replace(/\.[^.]+$/,'');
+    // FIX: limpiar nombre de URL de forma más robusta
+    const pathParts = url.replace(/\/$/, '').split('/').filter(Boolean);
+    const nombreUrl = decodeURIComponent(pathParts[pathParts.length - 1] || '')
+      .replace(/[-_]/g, ' ')
+      .replace(/\.[^.]+$/, '')
+      .trim() || `Juego ${i + 1}`;
+
     progDiv.innerHTML = `⏳ [${i+1}/${urls.length}] ${nombreUrl}<br>✅ ${ok} publicados &nbsp; ❌ ${fail} errores`;
     log('info', `📥 [${i+1}/${urls.length}] ${url}`);
 
     // 1. Escanear
     document.getElementById('inp-url').value = url;
-    const result = await py('escanear_url', url);
+    let result;
+    try {
+      result = await py('escanear_url', url);
+    } catch(e) {
+      log('err', `❌ Error escaneando ${url}: ${e}`); fail++; continue;
+    }
     if (!result || result.error || !result.archivos?.length) {
-      log('err', `❌ Sin archivos: ${url}`); fail++; continue;
+      log('err', `❌ Sin archivos en: ${url}${result?.error ? ' — ' + result.error : ''}`);
+      fail++; continue;
     }
 
-    const titulo = result.titulo || nombreUrl;
+    const titulo = (result.titulo || nombreUrl).trim();
     const ia = await py('generar_ia', titulo, cat);
-    const tituloFinal = ia.titulo || titulo;
+    const tituloFinal = (ia.titulo || titulo).trim();
 
-    // 2. Descargar archivos en carpeta catalogo/titulo
-    progDiv.innerHTML = `⬇️ [${i+1}/${urls.length}] Descargando: ${tituloFinal}<br>✅ ${ok} publicados &nbsp; ❌ ${fail} errores`;
-    log('info', `⬇️ Descargando ${result.archivos.length} archivos → ${cat}/${tituloFinal}`);
+    log('info', `📌 Título: "${tituloFinal}" | Catálogo: "${cat}" | ${result.archivos.length} archivos`);
 
-    const dl = await py('descargar_juego', result.archivos, tituloFinal, cat);
-    if (!dl.ok) {
-      log('err', `❌ Error descargando: ${url}`); fail++; continue;
-    }
-    const descargados = dl.resultados.filter(r => r.ok).length;
-    log('ok', `📦 ${descargados}/${result.archivos.length} archivos descargados en ${cat}/${tituloFinal}`);
-
-    // 3. Generar tabla con links originales y publicar
+    // 2. Publicar con links originales (no espera la descarga)
     progDiv.innerHTML = `🚀 [${i+1}/${urls.length}] Publicando: ${tituloFinal}<br>✅ ${ok} publicados &nbsp; ❌ ${fail} errores`;
-    const r = await py('generar_tabla_directa', result.archivos);
-    if (!r.ok) { log('err', `❌ Tabla: ${r.error}`); fail++; continue; }
+
+    let tablaResult;
+    try {
+      tablaResult = await py('generar_tabla_directa', result.archivos);
+    } catch(e) {
+      log('err', `❌ Error generando tabla: ${e}`); fail++; continue;
+    }
+    if (!tablaResult.ok) { log('err', `❌ Tabla: ${tablaResult.error}`); fail++; continue; }
 
     const datos = {
       titulo:         tituloFinal,
       pestana:        ia.pestana || 'ROM Download',
       catalogo:       cat,
-      contenido_html: r.tabla_html,
+      contenido_html: tablaResult.tabla_html,
       is_vip:         document.getElementById('vip-url').checked,
       is_published:   document.getElementById('published-url').checked,
       sitio:          (() => { try { return new URL(url).hostname; } catch(e){ return ''; } })()
     };
 
-    const pub = await py('publicar_post', datos);
-    if (pub.ok) {
-      log('ok', `✅ Publicado: ${tituloFinal}`); ok++;
-    } else {
-      log('err', `❌ Error publicando: ${pub.error}`); fail++;
+    let pub;
+    try {
+      pub = await py('publicar_post', datos);
+    } catch(e) {
+      log('err', `❌ Error publicando ${tituloFinal}: ${e}`); fail++; continue;
     }
 
-    // Pausa entre juegos
+    if (pub.ok) {
+      log('ok', `✅ Publicado: ${tituloFinal}`); ok++;
+      // 3. Iniciar descarga física en background (no bloquea, no afecta la publicación)
+      log('info', `⬇️  Iniciando descarga en background → firepaste_downloads/${cat}/${tituloFinal}/`);
+      py('descargar_juego_background', result.archivos, tituloFinal, cat);
+    } else {
+      log('err', `❌ Error publicando "${tituloFinal}": ${pub.error}`); fail++;
+    }
+
+    // Pausa entre juegos para no saturar el servidor
     if (i < urls.length - 1) await new Promise(res => setTimeout(res, 1500));
   }
 

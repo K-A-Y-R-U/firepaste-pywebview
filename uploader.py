@@ -6,7 +6,7 @@ Soporta: GoFile (sin cuenta), MediaFire, Google Drive, Mega
 import os, time, json, re, requests
 from pathlib import Path
 
-DOWNLOAD_DIR = Path.home() / "firepaste_downloads"
+DOWNLOAD_DIR = Path(__file__).parent / "downloads"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 
@@ -19,7 +19,6 @@ def _resolver_url_real(url: str, log) -> str:
     usa Playwright para esperar a que aparezca el link real del .zip y lo devuelve.
     Si ya es un link directo a un archivo, lo devuelve tal cual.
     """
-    # Extensiones conocidas de archivos directos
     ext_re = re.compile(
         r'\.(zip|rar|7z|rom|gba|gbc|nes|sfc|smc|n64|nds|iso|bin|z64|v64|xci|nsp|pkg|apk)(\?.*)?$',
         re.I
@@ -27,8 +26,6 @@ def _resolver_url_real(url: str, log) -> str:
     if ext_re.search(url.split("?")[0]):
         return url  # Ya es un link directo
 
-    # Detectar si es página de countdown de romsfun
-    # Patrón: /download/nombre-XXXX/N  donde N es número
     partes = url.rstrip("/").split("/")
     es_countdown = (
         "romsfun.com" in url and
@@ -36,7 +33,7 @@ def _resolver_url_real(url: str, log) -> str:
     )
 
     if not es_countdown:
-        return url  # No es countdown, devolver tal cual
+        return url
 
     log(f"⏳ Página con countdown, esperando link real: {url}")
     try:
@@ -53,18 +50,15 @@ def _resolver_url_real(url: str, log) -> str:
             except:
                 pass
 
-            # Esperar hasta 30s a que aparezca el botón "Download Now"
             link_real = None
             for _ in range(30):
                 try:
-                    # El botón tiene id="download-link" con el href real
                     el = page.query_selector("#download-link[href]")
                     if el:
                         link_real = el.get_attribute("href")
                         if link_real and ("statics.romsfun" in link_real or ext_re.search(link_real)):
                             log(f"✅ Link real obtenido: {link_real[:80]}...")
                             break
-                    # También buscar si el div #download-button ya es visible
                     btn_div = page.query_selector("#download-button")
                     if btn_div:
                         style = btn_div.get_attribute("class") or ""
@@ -86,11 +80,17 @@ def _resolver_url_real(url: str, log) -> str:
     except Exception as e:
         log(f"⚠️ Error resolviendo countdown: {e}")
 
-    return url  # Fallback: devolver la URL original
+    return url
 
 
-def _limpiar_nombre(nombre: str) -> str:
+def _limpiar_nombre(nombre) -> str:
     """Limpia un nombre para usarlo como carpeta o archivo."""
+    # FIX: proteger contra None y tipos no-string
+    if not nombre:
+        return "sin_nombre"
+    nombre = str(nombre).strip()
+    if not nombre:
+        return "sin_nombre"
     limpio = "".join(c for c in nombre if c.isalnum() or c in " .-_()[]").strip()
     return limpio or "sin_nombre"
 
@@ -116,7 +116,14 @@ def descargar_archivo(url: str, nombre: str, log,
         carpeta = carpeta / _limpiar_nombre(catalogo)
     if titulo_juego:
         carpeta = carpeta / _limpiar_nombre(titulo_juego)
-    carpeta.mkdir(parents=True, exist_ok=True)
+
+    # FIX: crear carpeta con manejo explícito de errores
+    try:
+        carpeta.mkdir(parents=True, exist_ok=True)
+        log(f"📁 Carpeta lista: {carpeta}")
+    except Exception as e:
+        log(f"❌ No se pudo crear la carpeta '{carpeta}': {e}")
+        return None
 
     destino = carpeta / nombre_limpio
     if destino.exists():
@@ -125,9 +132,28 @@ def descargar_archivo(url: str, nombre: str, log,
 
     log(f"⬇️  Descargando: {nombre_limpio} → {carpeta}")
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
-        r = requests.get(url, headers=headers, stream=True, timeout=60)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://romsfun.com/",
+        }
+        r = requests.get(url, headers=headers, stream=True, timeout=60, allow_redirects=True)
         r.raise_for_status()
+
+        # FIX: detectar si nos devolvieron HTML en lugar de un archivo binario
+        content_type = r.headers.get("Content-Type", "").lower()
+        if "text/html" in content_type:
+            log(f"❌ La URL devolvió una página HTML (no un archivo). Puede requerir autenticación o el link expiró.")
+            log(f"   URL: {url}")
+            return None
+
+        # FIX: detectar redirección a página de error o login
+        final_url = r.url
+        if final_url != url and any(x in final_url for x in ["login", "error", "404", "expired"]):
+            log(f"❌ Redirigido a página no válida: {final_url}")
+            return None
 
         total = int(r.headers.get("content-length", 0))
         descargado = 0
@@ -140,10 +166,41 @@ def descargar_archivo(url: str, nombre: str, log,
                     if total:
                         pct = int(descargado / total * 100)
                         log(f"⬇️  {nombre_limpio}: {pct}% ({_fmt_size(descargado)}/{_fmt_size(total)})")
+                    else:
+                        # FIX: mostrar progreso aunque no haya content-length
+                        log(f"⬇️  {nombre_limpio}: {_fmt_size(descargado)} descargados...")
 
-        log(f"✅ Descargado: {nombre_limpio} ({_fmt_size(destino.stat().st_size)})")
+        # FIX: verificar que el archivo descargado tiene tamaño razonable (>1KB)
+        size_final = destino.stat().st_size
+        if size_final < 1024:
+            # Puede ser un HTML de error guardado como archivo
+            try:
+                contenido = destino.read_bytes()
+                if b"<!DOCTYPE" in contenido[:200] or b"<html" in contenido[:200]:
+                    log(f"❌ El archivo descargado es HTML (posible página de error). Eliminando.")
+                    destino.unlink()
+                    return None
+            except:
+                pass
+
+        log(f"✅ Descargado: {nombre_limpio} ({_fmt_size(size_final)})")
         return destino
 
+    except requests.exceptions.HTTPError as e:
+        log(f"❌ Error HTTP {e.response.status_code} descargando {nombre_limpio}: {e}")
+        if destino.exists():
+            destino.unlink()
+        return None
+    except requests.exceptions.ConnectionError as e:
+        log(f"❌ Error de conexión descargando {nombre_limpio}: {e}")
+        if destino.exists():
+            destino.unlink()
+        return None
+    except requests.exceptions.Timeout:
+        log(f"❌ Timeout descargando {nombre_limpio} (60s). El archivo puede ser muy grande o el servidor lento.")
+        if destino.exists():
+            destino.unlink()
+        return None
     except Exception as e:
         log(f"❌ Error descargando {nombre_limpio}: {e}")
         if destino.exists():
@@ -181,7 +238,6 @@ def subir_gofile(ruta: Path, log, carpeta_nombre: str = "", api_token: str = "",
         upload_headers = {}
 
         if api_token:
-            # ── Con cuenta real: crear carpeta por juego (una sola vez) ──
             upload_headers["Authorization"] = f"Bearer {api_token}"
 
             if "folder_id" not in _estado and carpeta_nombre:
@@ -217,13 +273,11 @@ def subir_gofile(ruta: Path, log, carpeta_nombre: str = "", api_token: str = "",
                 upload_data["folderId"] = _estado["folder_id"]
 
         else:
-            # ── Sin cuenta: guest — reutilizar guestToken y folderId ──
             if "guest_token" in _estado:
                 upload_data["token"] = _estado["guest_token"]
             if "folder_id" in _estado:
                 upload_data["folderId"] = _estado["folder_id"]
 
-        # ── Subir archivo ──────────────────────────────────────────────
         with open(ruta, "rb") as f:
             resp = requests.post(
                 "https://upload.gofile.io/uploadfile",
@@ -238,7 +292,6 @@ def subir_gofile(ruta: Path, log, carpeta_nombre: str = "", api_token: str = "",
         if result.get("status") == "ok":
             data = result["data"]
 
-            # Guardar guestToken y folderId para el siguiente archivo
             if not api_token:
                 if "guestToken" in data and "guest_token" not in _estado:
                     _estado["guest_token"] = data["guestToken"]
@@ -249,7 +302,6 @@ def subir_gofile(ruta: Path, log, carpeta_nombre: str = "", api_token: str = "",
                     if fid and "folder_id" not in _estado:
                         _estado["folder_id"] = fid
 
-            # Construir link de descarga
             link = data.get("downloadPage", "")
             if not link:
                 fid = (data.get("parentFolder") or {}).get("id") or _estado.get("folder_id", "")
@@ -272,7 +324,6 @@ def subir_gofile(ruta: Path, log, carpeta_nombre: str = "", api_token: str = "",
 #  MEDIAFIRE — necesita email + password
 # ════════════════════════════════════════════
 def subir_mediafire(ruta: Path, email: str, password: str, log) -> dict | None:
-    """Sube a MediaFire con cuenta. Retorna {url, nombre, size}"""
     log(f"☁️  Subiendo a MediaFire: {ruta.name}")
     try:
         from mediafire import MediaFireClient
@@ -282,7 +333,6 @@ def subir_mediafire(ruta: Path, email: str, password: str, log) -> dict | None:
         destino_remoto = f"firepaste/{ruta.name}"
         client.upload_file(str(ruta), destino_remoto)
 
-        # Obtener link público
         result = client.get_links(destino_remoto, link_type="direct_download")
         links = result.get("links", [])
         if links:
@@ -302,7 +352,6 @@ def subir_mediafire(ruta: Path, email: str, password: str, log) -> dict | None:
 #  GOOGLE DRIVE — necesita credenciales OAuth
 # ════════════════════════════════════════════
 def subir_drive(ruta: Path, token_file: str, log) -> dict | None:
-    """Sube a Google Drive. Requiere credentials.json de Google Cloud Console."""
     log(f"☁️  Subiendo a Google Drive: {ruta.name}")
     try:
         from googleapiclient.discovery import build
@@ -335,7 +384,6 @@ def subir_drive(ruta: Path, token_file: str, log) -> dict | None:
         archivo = service.files().create(body=meta, media_body=media, fields="id").execute()
         file_id = archivo.get("id")
 
-        # Hacer público
         service.permissions().create(fileId=file_id, body={"type":"anyone","role":"reader"}).execute()
         url = f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
         log(f"✅ Drive: {url}")
@@ -353,7 +401,6 @@ def subir_drive(ruta: Path, token_file: str, log) -> dict | None:
 #  MEGA — necesita email + password
 # ════════════════════════════════════════════
 def subir_mega(ruta: Path, email: str, password: str, log) -> dict | None:
-    """Sube a Mega.nz con cuenta."""
     log(f"☁️  Subiendo a Mega: {ruta.name}")
     try:
         from mega import Mega
@@ -375,27 +422,13 @@ def subir_mega(ruta: Path, email: str, password: str, log) -> dict | None:
 #  FUNCIÓN PRINCIPAL — descarga + sube todo
 # ════════════════════════════════════════════
 def procesar_archivos(archivos: list, config_cloud: dict, log) -> list:
-    """
-    Descarga cada archivo y lo sube a las plataformas configuradas.
-
-    archivos: [{"nombre": str, "url": str, "size": str}, ...]
-    config_cloud: {
-        "plataformas": ["gofile", "mediafire", "drive", "mega"],
-        "mediafire_email": "...", "mediafire_pass": "...",
-        "mega_email": "...", "mega_pass": "...",
-        "drive_token": "~/.firepaste_drive_token.pkl"
-    }
-
-    Retorna lista de resultados con los links nuevos.
-    """
     plataformas = config_cloud.get("plataformas", ["gofile"])
     resultados = []
-    gofile_estado = {}  # Estado compartido entre todos los archivos del mismo juego
+    gofile_estado = {}
 
     for i, archivo in enumerate(archivos):
         log(f"\n📦 [{i+1}/{len(archivos)}] {archivo['nombre']}")
 
-        # 1. Descargar con estructura de carpetas
         ruta_local = descargar_archivo(
             archivo["url"], archivo["nombre"], log,
             titulo_juego=config_cloud.get("titulo_juego", ""),
@@ -412,7 +445,6 @@ def procesar_archivos(archivos: list, config_cloud: dict, log) -> list:
 
         links_subidos = []
 
-        # 2. Subir a cada plataforma
         if "gofile" in plataformas:
             carpeta = config_cloud.get("titulo_juego", "") or archivo.get("nombre", "")
             token   = config_cloud.get("gofile_token", "")
@@ -461,12 +493,6 @@ def procesar_archivos(archivos: list, config_cloud: dict, log) -> list:
 #  GENERAR TABLA HTML con múltiples links
 # ════════════════════════════════════════════
 def build_tabla_resultados(resultados: list) -> str:
-    """
-    Genera la tabla HTML de Firepaste con nombre, tamaño y links por plataforma.
-
-    File Name | Size | GoFile | MediaFire | Mega | Drive
-    """
-    # Detectar qué plataformas hay
     plataformas = []
     for r in resultados:
         for l in r.get("links", []):
@@ -481,7 +507,6 @@ def build_tabla_resultados(resultados: list) -> str:
         "Google Drive": "🟢 Drive"
     }
 
-    # Header
     th_first = 'style="box-sizing:border-box;vertical-align:middle;font-size:16px;font-weight:bold;padding:11px 15px;color:rgb(255,255,255);background:rgb(41,46,59);border-right:1px solid rgb(30,33,42);text-align:center;border-radius:16px 0px 0px 0px;"'
     th_mid   = 'style="box-sizing:border-box;vertical-align:middle;font-size:16px;font-weight:bold;padding:11px 15px;color:rgb(255,255,255);background:rgb(41,46,59);border-right:1px solid rgb(30,33,42);text-align:center;"'
     th_last  = 'style="box-sizing:border-box;vertical-align:middle;font-size:16px;font-weight:bold;padding:11px 15px;color:rgb(255,255,255);background:rgb(41,46,59);border-right:none;text-align:center;border-radius:0px 16px 0px 0px;"'
@@ -496,7 +521,6 @@ def build_tabla_resultados(resultados: list) -> str:
         else:
             header_cells += f"<th {th_mid}><p><strong>{col}</strong></p></th>"
 
-    # Filas
     td_name = 'style="box-sizing:border-box;vertical-align:middle;font-size:14px;font-weight:bold;padding:10px 15px;position:relative;text-align:left;border-right:1px solid rgb(223,223,223);background:transparent;"'
     td_muted = 'style="box-sizing:border-box;vertical-align:middle;font-size:14px;font-weight:bold;padding:10px 15px;position:relative;color:rgb(108,117,125);text-align:left;border-right:1px solid rgb(223,223,223);background:transparent;"'
     td_link_last = 'style="box-sizing:border-box;vertical-align:middle;font-size:14px;font-weight:bold;padding:10px 15px;position:relative;text-align:center;border-right:none;background:transparent;"'
@@ -531,10 +555,6 @@ def build_tabla_resultados(resultados: list) -> str:
 
 
 def build_tabla_directa(archivos: list) -> str:
-    """
-    Genera tabla HTML con los links originales (sin descargar).
-    Estilo idéntico al de Firepaste.
-    """
     th_first = 'style="box-sizing:border-box;vertical-align:middle;font-size:16px;font-weight:bold;padding:11px 15px;color:rgb(255,255,255);background:rgb(41,46,59);border-right:1px solid rgb(30,33,42);text-align:center;border-radius:16px 0px 0px 0px;"'
     th_last  = 'style="box-sizing:border-box;vertical-align:middle;font-size:16px;font-weight:bold;padding:11px 15px;color:rgb(255,255,255);background:rgb(41,46,59);border-right:none;text-align:center;border-radius:0px 16px 0px 0px;"'
     td_name  = 'style="box-sizing:border-box;vertical-align:middle;font-size:14px;font-weight:bold;padding:10px 15px;position:relative;text-align:left;border-right:1px solid rgb(223,223,223);background:transparent;"'

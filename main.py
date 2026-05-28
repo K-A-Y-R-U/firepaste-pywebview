@@ -43,18 +43,12 @@ def save_json(path, data):
 # ════════════════════════════════════════════
 
 def _es_firepaste(url: str) -> bool:
-    """Detecta si la URL pertenece a firepaste.com (posts o vip)."""
     from urllib.parse import urlparse
     host = urlparse(url).netloc.lower().lstrip("www.")
     return host == "firepaste.com"
 
 
 def _scrape_firepaste(url: str, progreso=None) -> dict:
-    """
-    Scrapea una página de firepaste.com usando requests + BeautifulSoup.
-    No necesita Playwright porque el contenido es HTML estático (server-side).
-    Devuelve {"titulo": str, "archivos": [{"nombre", "url", "size"}]}
-    """
     try:
         from bs4 import BeautifulSoup
     except ImportError:
@@ -81,14 +75,12 @@ def _scrape_firepaste(url: str, progreso=None) -> dict:
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # ── Título: <h3> dentro de .paste-content o primer <h3> de la página ──
     titulo = ""
     h3 = soup.select_one(".paste-content h3, .card-body h3, h3")
     if h3:
         titulo = h3.get_text(strip=True)
     log(f"📌 Título detectado: {titulo!r}")
 
-    # ── Archivos: tabla con links ──
     archivos = []
     for fila in soup.select("table tbody tr"):
         celdas = fila.find_all("td")
@@ -110,23 +102,16 @@ def _scrape_firepaste(url: str, progreso=None) -> dict:
 
 
 def scrape_url(url: str, progreso=None) -> list:
-    """
-    Punto de entrada unificado para scraping.
-    - URLs de firepaste.com → scraper liviano con requests (sin Playwright)
-    - Otros sitios → scraper con Playwright (comportamiento original)
-    """
     from urllib.parse import urljoin, urlparse
 
     def log(msg):
         if progreso: progreso(msg)
         else: print(msg)
 
-    # ── Ruta rápida para firepaste.com ──
     if _es_firepaste(url):
         resultado = _scrape_firepaste(url, progreso)
         return resultado["archivos"]
 
-    # ── Scraper genérico con Playwright (sitios externos) ──
     from playwright.sync_api import sync_playwright
 
     archivos = []
@@ -136,7 +121,6 @@ def scrape_url(url: str, progreso=None) -> list:
     )
 
     def _navegar(page, dest, espera=2):
-        """Navega a una URL tolerando timeouts — usa domcontentloaded, nunca networkidle."""
         for modo in ("domcontentloaded", "load", "commit"):
             try:
                 page.goto(dest, wait_until=modo, timeout=25000)
@@ -147,7 +131,6 @@ def scrape_url(url: str, progreso=None) -> list:
         return False
 
     def _extraer_tabla(page):
-        """Extrae archivos desde tabla HTML estándar (Filename | Type | Size)."""
         resultado = []
         for fila in page.query_selector_all("table tbody tr, table tr"):
             celdas = fila.query_selector_all("td")
@@ -164,7 +147,6 @@ def scrape_url(url: str, progreso=None) -> list:
         return resultado
 
     def _extraer_titulo(page):
-        """Extrae el título del juego desde h1/h2/h3."""
         for sel in ["h1", "h2", ".game-title", ".title", "h3"]:
             try:
                 el = page.query_selector(sel)
@@ -181,18 +163,6 @@ def scrape_url(url: str, progreso=None) -> list:
         return "romsfun.com" in urlparse(url).netloc
 
     def _scrape_romsfun(page, url, log):
-        """
-        Romsfun tiene 3 tipos de URL que el usuario puede pegar:
-
-        A) /roms/.../pac-man-world.html     → página del juego
-        B) /download/pac-man-world-5529     → página de lista de archivos
-        C) /download/pac-man-world-5529/1   → página individual (con countdown)
-
-        Para A: extraer título del h1, encontrar el href del botón "Download ROM",
-                luego tratar como B.
-        Para B: leer la tabla directamente con requests+BS4 (HTML estático).
-        Para C: ya tenemos el link directo, guardarlo como único archivo.
-        """
         import requests as req_lib
         try:
             from bs4 import BeautifulSoup as BS
@@ -210,14 +180,11 @@ def scrape_url(url: str, progreso=None) -> list:
 
         log(f"🎮 Modo romsfun: {url}")
 
-        # ── Detectar tipo de URL ───────────────────────────────────────
-        path = url.rstrip("/").split("romsfun.com")[-1]   # e.g. /roms/.../game.html
-        partes_path = [p for p in path.split("/") if p]   # ['roms','gba','game.html']
+        path = url.rstrip("/").split("romsfun.com")[-1]
+        partes_path = [p for p in path.split("/") if p]
 
-        # Tipo C: /download/game-XXXX/N  (termina en número)
         if partes_path and partes_path[-1].isdigit():
             log(f"📂 URL directa de archivo individual: {url}")
-            # Extraer nombre desde la página con Playwright (tiene countdown JS)
             _navegar(page, url, espera=1)
             nombre = ""
             try:
@@ -231,19 +198,16 @@ def scrape_url(url: str, progreso=None) -> list:
                 nombre = url.split("/")[-2].replace("-", " ").title()
             return [{"nombre": nombre, "url": url, "size": ""}], nombre
 
-        # ── Tipo A: página del juego → obtener URL de lista ───────────
-        url_lista = url  # por defecto asumimos que es tipo B
+        url_lista = url
         titulo = ""
 
         if "/roms/" in url:
-            # Leer página del juego con requests (es HTML estático)
             log(f"📖 Leyendo página del juego...")
             try:
                 r = req_lib.get(url, headers=HEADERS, timeout=15)
                 r.raise_for_status()
                 soup = BS(r.text, "html.parser")
 
-                # Título: <h1 class="...text-romfun-pink...">Pac-Man World</h1>
                 for h in soup.find_all(["h1", "h2"]):
                     t = h.get_text(strip=True)
                     if t and len(t) > 2 and "ROMSFUN" not in t.upper() and "Download" not in t:
@@ -252,12 +216,10 @@ def scrape_url(url: str, progreso=None) -> list:
                 if titulo:
                     log(f"📌 Título: {titulo!r}")
 
-                # Botón Download ROM: <a href="/download/pac-man-world-5529">Download ROM</a>
                 for a in soup.find_all("a", href=True):
                     txt = a.get_text(strip=True)
                     href = a["href"]
                     if "Download ROM" in txt and "/download/" in href:
-                        # Asegurar URL absoluta
                         if href.startswith("/"):
                             href = "https://romsfun.com" + href
                         url_lista = href
@@ -270,7 +232,6 @@ def scrape_url(url: str, progreso=None) -> list:
 
             except Exception as e:
                 if "fallback playwright" in str(e) or "requests" in str(type(e).__name__).lower():
-                    # Fallback con Playwright
                     _navegar(page, url, espera=2)
                     try:
                         h1 = page.query_selector("h1")
@@ -288,7 +249,6 @@ def scrape_url(url: str, progreso=None) -> list:
                                 log(f"🖱️ URL lista (playwright): {url_lista}")
                     except: pass
 
-        # ── Tipo B / resultado de A: leer tabla con requests ──────────
         log(f"📋 Leyendo lista de archivos: {url_lista}")
         archivos = []
         try:
@@ -296,7 +256,6 @@ def scrape_url(url: str, progreso=None) -> list:
             r.raise_for_status()
             soup = BS(r.text, "html.parser")
 
-            # Si no tenemos título aún, buscarlo aquí
             if not titulo:
                 for h in soup.find_all(["h1", "h2"]):
                     t = h.get_text(strip=True)
@@ -304,7 +263,6 @@ def scrape_url(url: str, progreso=None) -> list:
                         titulo = t
                         break
 
-            # Tabla: thead con Filename | Type | Size
             for tabla in soup.find_all("table"):
                 for fila in tabla.find_all("tr"):
                     celdas = fila.find_all("td")
@@ -326,7 +284,6 @@ def scrape_url(url: str, progreso=None) -> list:
 
         except Exception as e:
             log(f"⚠️ Error requests: {e}")
-            # Último fallback con Playwright
             _navegar(page, url_lista, espera=3)
             for _ in range(5):
                 filas = page.query_selector_all("table tbody tr")
@@ -356,12 +313,10 @@ def scrape_url(url: str, progreso=None) -> list:
         )
         page = ctx.new_page()
 
-        # ── Despachar por sitio conocido ──
         titulo_detectado = ""
         if _es_romsfun(url):
             archivos, titulo_detectado = _scrape_romsfun(page, url, log)
         else:
-            # ── Scraper genérico: abrir → buscar botón download → extraer tabla ──
             log(f"🌐 Abriendo: {url}")
             _navegar(page, url, espera=2)
 
@@ -369,7 +324,6 @@ def scrape_url(url: str, progreso=None) -> list:
             if titulo_detectado:
                 log(f"📌 Título: {titulo_detectado!r}")
 
-            # Buscar botón/enlace de descarga
             for selector in [
                 'a:has-text("Download ROM")', 'a:has-text("Download Game")',
                 'a:has-text("Download")', 'button:has-text("Download")',
@@ -393,7 +347,6 @@ def scrape_url(url: str, progreso=None) -> list:
             log(f"🔍 Extrayendo de: {page.url}")
             archivos = _extraer_tabla(page)
 
-        # ── Fallback universal: buscar links por extensión ──
         if not archivos:
             log("🔄 Fallback: buscando links por extensión...")
             for a in page.query_selector_all("a[href]"):
@@ -407,7 +360,6 @@ def scrape_url(url: str, progreso=None) -> list:
 
         browser.close()
 
-    # Deduplicar
     vistos = set()
     unicos = []
     for a in archivos:
@@ -422,20 +374,9 @@ def scrape_url(url: str, progreso=None) -> list:
 #  BOT PLAYWRIGHT
 # ════════════════════════════════════════════
 def bot_publicar(config: dict, datos: dict, progreso) -> bool:
-    """
-    Publica un post en Firepaste usando la API REST del bot.
-    Requiere que en el .env de firepaste esté configurado BOT_API_TOKEN.
-    config debe incluir:
-      - url_panel   (ej: https://firepaste.com/admin)
-      - bot_api_token
-    datos debe incluir:
-      - titulo, catalogo, pestana, contenido_html, is_vip (opcional)
-    """
     import requests as _req
 
-    # La base de la API se deriva de url_panel quitando /admin
     panel = config.get("url_panel", "").rstrip("/")
-    # Intentar deducir la raíz: si termina en /admin, quitar eso
     if panel.endswith("/admin"):
         api_base = panel[:-6].rstrip("/") + "/api/bot"
     else:
@@ -452,7 +393,6 @@ def bot_publicar(config: dict, datos: dict, progreso) -> bool:
     }
 
     try:
-        # 1. Verificar conexión listando catálogos
         progreso(20, "🔌 Conectando con la API de Firepaste...")
         r = _req.get(f"{api_base}/catalogs", headers=headers, timeout=10)
         if r.status_code == 401:
@@ -461,7 +401,6 @@ def bot_publicar(config: dict, datos: dict, progreso) -> bool:
             progreso(0, "❌ API no encontrada — ¿instalaste el api.php y ApiPostController?"); return False
         r.raise_for_status()
 
-        # 2. Verificar / crear catálogo
         cat = datos.get("catalogo", "").strip()
         if cat:
             progreso(40, f"📁 Verificando catálogo '{cat}'...")
@@ -473,7 +412,6 @@ def bot_publicar(config: dict, datos: dict, progreso) -> bool:
         else:
             progreso(50, "⚠️ Sin catálogo asignado")
 
-        # 3. Crear el post
         progreso(70, "📝 Publicando post...")
         payload = {
             "titulo":        datos.get("titulo", "").strip(),
@@ -506,7 +444,7 @@ def bot_publicar(config: dict, datos: dict, progreso) -> bool:
 # ════════════════════════════════════════════
 class API:
     def __init__(self):
-        self._window = None  # se setea después
+        self._window = None
 
     # ── Config ──────────────────────────────
     def get_config(self):
@@ -546,14 +484,7 @@ class API:
         save_json(PATTERNS_FILE, {"catalogos": {}, "sitios": {}, "total": 0})
         return {"ok": True}
 
-    # ── Config Cloud ────────────────────────
-
-
     def generar_tabla_directa(self, archivos: list) -> dict:
-        """
-        Genera tabla HTML con los links originales SIN descargar archivos.
-        Ideal para publicar links de romsfun directamente en firepaste.
-        """
         from uploader import build_tabla_directa
         try:
             tabla_html = build_tabla_directa(archivos)
@@ -569,6 +500,10 @@ class API:
         """
         from uploader import descargar_archivo
 
+        # FIX: validar parámetros antes de empezar
+        titulo   = (titulo   or "").strip()
+        catalogo = (catalogo or "").strip()
+
         def log(msg):
             try:
                 if self._window:
@@ -577,7 +512,21 @@ class API:
                     )
             except: pass
 
+        # FIX: log de diagnóstico para confirmar que llegan los valores correctos
+        log(f"📂 Catálogo: '{catalogo}' | Título: '{titulo}' | Archivos: {len(archivos)}")
+
+        if not archivos:
+            log("⚠️ No hay archivos para descargar")
+            return {"ok": False, "error": "No hay archivos", "resultados": []}
+
+        if not catalogo:
+            log("⚠️ Catálogo vacío — se usará carpeta raíz de descargas")
+
+        if not titulo:
+            log("⚠️ Título vacío — los archivos se guardarán sin subcarpeta de juego")
+
         resultados = []
+
         def tarea():
             for i, archivo in enumerate(archivos):
                 log(f"📦 [{i+1}/{len(archivos)}] {archivo['nombre']}")
@@ -591,12 +540,49 @@ class API:
                     "ok": ruta is not None,
                     "ruta": str(ruta) if ruta else ""
                 })
-            log(f"✅ Descarga completa — {sum(1 for r in resultados if r['ok'])}/{len(resultados)} archivos")
+            exitosos = sum(1 for r in resultados if r["ok"])
+            log(f"✅ Descarga completa — {exitosos}/{len(resultados)} archivos")
 
-        import threading
         t = threading.Thread(target=tarea)
         t.start(); t.join()
         return {"ok": True, "resultados": resultados}
+
+    # ── Descargar en background (no bloquea, solo loguea resultados) ──
+    def descargar_juego_background(self, archivos: list, titulo: str, catalogo: str) -> dict:
+        """
+        Igual que descargar_juego pero lanza el thread y retorna inmediatamente.
+        La descarga ocurre en segundo plano — no bloquea la UI ni la publicación.
+        """
+        from uploader import descargar_archivo
+
+        titulo   = (titulo   or "").strip()
+        catalogo = (catalogo or "").strip()
+
+        def log(msg):
+            try:
+                if self._window:
+                    self._window.evaluate_js(
+                        f"window._logScrape && window._logScrape({json.dumps(msg)})"
+                    )
+            except: pass
+
+        def tarea():
+            log(f"📂 [BG] Descargando {len(archivos)} archivos → {catalogo}/{titulo}")
+            exitosos = 0
+            for i, archivo in enumerate(archivos):
+                log(f"⬇️  [BG {i+1}/{len(archivos)}] {archivo['nombre']}")
+                ruta = descargar_archivo(
+                    archivo["url"], archivo["nombre"], log,
+                    titulo_juego=titulo,
+                    catalogo=catalogo
+                )
+                if ruta:
+                    exitosos += 1
+            log(f"✅ [BG] Descarga terminada — {exitosos}/{len(archivos)} archivos en ~/firepaste_downloads/{catalogo}/{titulo}/")
+
+        t = threading.Thread(target=tarea, daemon=True)
+        t.start()
+        return {"ok": True}
 
     # ── Escanear URL ────────────────────────
     def escanear_url(self, url: str):
@@ -609,8 +595,6 @@ class API:
                         )
                 except: pass
 
-            # Para firepaste.com usamos el scraper especializado que también
-            # extrae el título real de la página (h3).
             if _es_firepaste(url):
                 resultado = _scrape_firepaste(url, progreso)
                 return {
@@ -626,23 +610,19 @@ class API:
         except Exception as e:
             return {"error": str(e), "archivos": [], "titulo": ""}
 
-    # ── Generar título automático (sin IA) ──
+    # ── Generar título automático ──
     def generar_ia(self, titulo: str, catalogo: str):
-        """Genera título y pestaña automáticamente del nombre del archivo."""
         import re
 
-        # Limpiar el nombre: quitar extensiones, guiones, corchetes típicos de ROMs
         limpio = titulo
         limpio = re.sub(r'\.(zip|rar|7z|rom|gba|gbc|nes|iso|bin|nds|sfc|smc|n64)$', '', limpio, flags=re.I)
-        limpio = re.sub(r'\s*\(.*?\)', '', limpio)   # quitar (USA), (Europe), (Rev 1)...
-        limpio = re.sub(r'\s*\[.*?\]', '', limpio)   # quitar [!], [T+Esp]...
-        limpio = re.sub(r'[-_]', ' ', limpio)        # guiones → espacios
-        limpio = re.sub(r'\s+', ' ', limpio).strip() # espacios dobles
+        limpio = re.sub(r'\s*\(.*?\)', '', limpio)
+        limpio = re.sub(r'\s*\[.*?\]', '', limpio)
+        limpio = re.sub(r'[-_]', ' ', limpio)
+        limpio = re.sub(r'\s+', ' ', limpio).strip()
 
-        # Title case
         titulo_limpio = limpio.title() if limpio else titulo.title()
 
-        # Pestaña según catálogo
         cat_lower = catalogo.lower()
         if any(x in cat_lower for x in ["gba","nes","snes","n64","nds","psx","ps2","rom"]):
             pestana = "ROM Download"
@@ -667,7 +647,6 @@ class API:
         resultado = {"ok": False, "error": ""}
 
         def progreso(pct, msg):
-            # Enviar progreso al JS
             try:
                 if self._window:
                     self._window.evaluate_js(
@@ -688,7 +667,7 @@ class API:
                     resultado["error"] = "Error al publicar. Revisa la consola o verifica tu token."
 
         t = threading.Thread(target=tarea)
-        t.start(); t.join()  # bloqueante para que JS espere el resultado
+        t.start(); t.join()
         return resultado
 
 # ════════════════════════════════════════════
