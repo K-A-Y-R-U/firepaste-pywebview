@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Firepaste Bot</title>
+<style>
+  :root {
+    --bg:       #0d1117;
+    --bg2:      #161b22;
+    --bg3:      #21262d;
+    --border:   #30363d;
+    --accent:   #f97316;
+    --accent2:  #ea580c;
+    --blue:     #58a6ff;
+    --green:    #3fb950;
+    --red:      #f85149;
+    --yellow:   #d29922;
+    --text:     #e6edf3;
+    --text2:    #8b949e;
+    --radius:   10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+  body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; }
+  .logo .flame { font-size: 22px; }
+  .logo span { background: linear-gradient(90deg, var(--accent), #facc15); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header-btns { display: flex; gap: 8px; }
+
+  /* ── Botones ── */
+  .btn {
+    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg3); color: var(--text); cursor: pointer;
+    font-size: 13px; font-weight: 500; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { background: var(--border); }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); border-color: var(--accent2); color: #fff; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-primary:disabled { background: #4a2010; border-color: #4a2010; color: #7a4030; cursor: not-allowed; transform: none; }
+  .btn-green { background: #1a3a22; border-color: var(--green); color: var(--green); }
+  .btn-green:hover { background: #1f4a2a; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  /* ── Layout ── */
+  .main { display: grid; grid-template-columns: 1fr 320px; gap: 0; flex: 1; }
+  .left-panel { padding: 20px 24px; border-right: 1px solid var(--border); overflow-y: auto; }
+  .right-panel { padding: 20px 18px; background: var(--bg2); display: flex; flex-direction: column; gap: 14px; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--bg2); padding: 4px; border-radius: 10px; border: 1px solid var(--border); }
+  .tab { flex: 1; padding: 9px; text-align: center; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2); transition: all 0.15s; border: none; background: transparent; }
+  .tab.active { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Form ── */
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .field input, .field textarea, .field select {
+    width: 100%; padding: 10px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg3);
+    color: var(--text); font-size: 14px; outline: none; transition: border 0.15s;
+  }
+  .field input:focus, .field textarea:focus { border-color: var(--accent); }
+  /* ── Custom Dropdown ── */
+  .field select { display: none; } /* ocultar select nativo */
+  .custom-select { position: relative; width: 100%; }
+  .custom-select-trigger {
+    width: 100%; padding: 10px 36px 10px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg3);
+    color: var(--text); font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: space-between;
+    user-select: none; transition: border 0.15s;
+  }
+  .custom-select-trigger:hover { border-color: var(--accent); }
+  .custom-select-trigger.open { border-color: var(--accent); border-radius: 8px 8px 0 0; }
+  .custom-select-trigger::after {
+    content: "▾"; font-size: 14px; color: var(--text2);
+    position: absolute; right: 12px; transition: transform 0.2s;
+  }
+  .custom-select-trigger.open::after { transform: rotate(180deg); }
+  .custom-select-dropdown {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--bg3); border: 1px solid var(--accent);
+    border-top: none; border-radius: 0 0 8px 8px;
+    max-height: 220px; overflow-y: auto; z-index: 500;
+  }
+  .custom-select-dropdown.open { display: block; }
+  .custom-select-option {
+    padding: 9px 14px; font-size: 14px; color: var(--text);
+    cursor: pointer; transition: background 0.1s;
+  }
+  .custom-select-option:hover { background: var(--border); }
+  .custom-select-option.selected { background: #1a2535; color: var(--accent); font-weight: 600; }
+  .custom-select-option.placeholder { color: var(--text2); font-style: italic; }
+  .custom-select-option.nuevo { color: var(--green); font-weight: 600; }
+  .field textarea { resize: vertical; min-height: 100px; font-family: inherit; }
+  .field .hint { font-size: 11px; color: var(--text2); margin-top: 5px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* ── URL bar ── */
+  .url-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+  .url-bar input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); font-size: 14px; outline: none; }
+  .url-bar input:focus { border-color: var(--blue); }
+
+  /* ── Tags / chips ── */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chip {
+    padding: 4px 12px; border-radius: 20px; font-size: 12px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg3); color: var(--text2);
+    transition: all 0.15s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip.cat { background: #1a1e2a; border-color: #3a4060; color: var(--blue); }
+  .chip.sitio { background: #1a2a1a; border-color: #3a6040; color: var(--green); }
+
+  /* ── Archivos encontrados ── */
+  .archivos-list { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); max-height: 200px; overflow-y: auto; }
+  .archivo-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .archivo-item:last-child { border-bottom: none; }
+  .archivo-nombre { color: var(--blue); }
+  .archivo-size { color: var(--text2); font-size: 12px; white-space: nowrap; margin-left: 12px; }
+  .archivos-empty { padding: 24px; text-align: center; color: var(--text2); font-size: 13px; }
+
+  /* ── Toggle VIP ── */
+  .toggle-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+  .toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; inset: 0; background: var(--bg3); border: 1px solid var(--border); border-radius: 22px; cursor: pointer; transition: 0.2s; }
+  .slider:before { content: ""; position: absolute; width: 16px; height: 16px; left: 2px; bottom: 2px; background: var(--text2); border-radius: 50%; transition: 0.2s; }
+  .toggle input:checked + .slider { background: var(--accent); border-color: var(--accent2); }
+  .toggle input:checked + .slider:before { transform: translateX(18px); background: #fff; }
+  .toggle-label { font-size: 13px; color: var(--text); }
+
+  /* ── Panel derecho ── */
+  .panel-section { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .panel-title { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+
+  /* ── Preview ── */
+  .preview-titulo { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; line-height: 1.4; }
+  .preview-meta { font-size: 12px; color: var(--text2); }
+  .preview-empty { color: var(--text2); font-size: 13px; font-style: italic; }
+
+  /* ── Log ── */
+  .log-wrap { background: #0a0d10; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; height: 160px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 12px; flex: 1; }
+  .log-line { padding: 2px 0; line-height: 1.5; }
+  .log-ok   { color: var(--green); }
+  .log-err  { color: var(--red); }
+  .log-warn { color: var(--yellow); }
+  .log-info { color: var(--blue); }
+  .log-def  { color: var(--text2); }
+
+  /* ── Stats ── */
+  .stat-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 4px 0; }
+  .stat-val { font-weight: 600; color: var(--text); }
+  .stat-key { color: var(--text2); }
+
+  /* ── Progress bar ── */
+  .progress-wrap { height: 3px; background: var(--bg); border-radius: 2px; overflow: hidden; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), #facc15); border-radius: 2px; transition: width 0.4s; width: 0%; }
+
+  /* ── Badge ── */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-ok { background: #1a3a22; color: var(--green); }
+  .badge-vip { background: #2a1a3a; color: #c084fc; }
+  .badge-pub { background: #1a2a3a; color: var(--blue); }
+
+  /* ── Modal ── */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: 480px; max-width: 95vw; }
+  .modal h3 { font-size: 16px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+  .modal-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+  /* ── Historial ── */
+  .hist-item { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .hist-item:last-child { border-bottom: none; }
+  .hist-titulo { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .hist-meta { font-size: 11px; color: var(--text2); display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+  .full-btn { width: 100%; padding: 13px; font-size: 15px; font-weight: 700; border-radius: 10px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<div class="header">
+  <div class="logo">
+    <span class="flame">🔥</span>
+    <span>Firepaste Bot</span>
+  </div>
+  <div class="header-btns">
+    <button class="btn btn-sm" onclick="abrirHistorial()">📋 Historial</button>
+    <button class="btn btn-sm" onclick="abrirLimpiar()" style="color:var(--red);border-color:var(--red)">🗑️ Limpiar</button>
+    <button class="btn btn-sm" onclick="abrirConfig()">⚙️ Config</button>
+  </div>
+</div>
+
+<!-- ══ MAIN ══ -->
+<div class="main">
+
+  <!-- ── Panel izquierdo ── -->
+  <div class="left-panel">
+    <div class="tabs">
+      <button class="tab active" onclick="cambiarTab('url', this)">🔗 Desde URL</button>
+      <button class="tab" onclick="cambiarTab('manual', this)">✏️ Manual</button>
+    </div>
+
+    <!-- TAB URL -->
+    <div id="tab-url" class="tab-content active">
+      <div class="url-bar">
+        <input type="text" id="inp-url" placeholder="https://myrient.abadox.com/files/..." />
+        <button class="btn" onclick="escanear()">🔍 Escanear</button>
+      </div>
+
+      <div id="chips-sitios" class="chips" style="margin-bottom:14px"></div>
+
+      <!-- Lista archivos -->
+      <div class="field">
+        <label>Archivos encontrados <span id="badge-n" style="font-weight:400;color:var(--text2)"></span></label>
+        <div class="archivos-list" id="archivos-list">
+          <div class="archivos-empty">Ingresa una URL y haz clic en Escanear</div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>Nombre del juego / título</label>
+          <input type="text" id="inp-titulo-url" placeholder="Ej: Mortal Kombat Advance" />
+        </div>
+        <div class="field">
+          <label>Catálogo</label>
+          <div class="custom-select" id="cs-cat-url">
+            <div class="custom-select-trigger" onclick="toggleDropdown('cs-cat-url')" id="cs-cat-url-trigger">
+              <span id="cs-cat-url-label" style="color:var(--text2);font-style:italic">— Selecciona un catálogo —</span>
+            </div>
+            <div class="custom-select-dropdown" id="cs-cat-url-dropdown"></div>
+          </div>
+          <input type="hidden" id="inp-cat-url" value="">
+        </div>
+      </div>
+      <div id="chips-cats-url" class="chips" style="margin-bottom:14px"></div>
+
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="vip-url"><span class="slider"></span></label>
+        <span class="toggle-label">🔒 Contenido VIP</span>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="published-url" checked onchange="updatePublishedLabel('url')"><span class="slider"></span></label>
+        <span class="toggle-label" id="published-url-label" style="color:var(--green)">✅ Publicado</span>
+      </div>
+
+
+
+      <!-- Botones de acción paso a paso -->
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+        <button class="btn" style="width:100%;justify-content:center;background:var(--blue)" onclick="publicarDirecto()">
+          🚀 Publicar directo
+        </button>
+
+
+      </div>
+    </div>
+
+    <!-- TAB MANUAL -->
+    <div id="tab-manual" class="tab-content">
+      <div class="row2">
+        <div class="field">
+          <label>Título del post</label>
+          <input type="text" id="inp-titulo-m" placeholder="Mortal Kombat Advance" />
+        </div>
+        <div class="field">
+          <label>Pestaña</label>
+          <input type="text" id="inp-pestana-m" placeholder="Free Download" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Catálogo</label>
+        <div class="custom-select" id="cs-cat-m">
+          <div class="custom-select-trigger" onclick="toggleDropdown('cs-cat-m')" id="cs-cat-m-trigger">
+            <span id="cs-cat-m-label" style="color:var(--text2);font-style:italic">— Selecciona un catálogo —</span>
+          </div>
+          <div class="custom-select-dropdown" id="cs-cat-m-dropdown"></div>
+        </div>
+        <input type="hidden" id="inp-cat-m" value="">
+      </div>
+      <div id="chips-cats-m" class="chips" style="margin-bottom:14px"></div>
+      <div class="field">
+        <label>Links — uno por línea: nombre | URL | tamaño</label>
+        <textarea id="inp-links" placeholder="Mortal Kombat (Europe) | https://enlace.com/rom.zip | 4.9 MB&#10;Mortal Kombat (USA) | https://enlace.com/rom2.zip | 4.9 MB"></textarea>
+        <div class="hint">Formato: nombre_archivo | https://url.com/archivo.zip | 4.9 MB</div>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="vip-m"><span class="slider"></span></label>
+        <span class="toggle-label">🔒 Contenido VIP</span>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle"><input type="checkbox" id="published-m" checked onchange="updatePublishedLabel('m')"><span class="slider"></span></label>
+        <span class="toggle-label" id="published-m-label" style="color:var(--green)">✅ Publicado</span>
+      </div>
+      <button class="btn btn-green" style="width:100%;margin-top:12px" onclick="prepararManual()">
+        ✅ Preparar post
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Panel derecho ── -->
+  <div class="right-panel">
+
+    <!-- Stats -->
+    <div class="panel-section">
+      <div class="panel-title">📊 Estadísticas</div>
+      <div id="stats-content">
+        <div class="stat-row"><span class="stat-key">Posts subidos</span><span class="stat-val" id="stat-total">0</span></div>
+        <div class="stat-row"><span class="stat-key">Catálogo favorito</span><span class="stat-val" id="stat-cat">—</span></div>
+        <div class="stat-row"><span class="stat-key">Sitio frecuente</span><span class="stat-val" id="stat-sitio">—</span></div>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div class="panel-section">
+      <div class="panel-title">👁️ Vista previa</div>
+      <div id="preview-box">
+        <div class="preview-empty">El post aparecerá aquí después de generar con IA</div>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="panel-section" id="progress-section" style="display:none">
+      <div class="panel-title">⏳ Progreso</div>
+      <div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+      <div style="font-size:12px;color:var(--text2);margin-top:8px" id="progress-label"></div>
+    </div>
+
+    <!-- Log -->
+    <div class="panel-section" style="flex:1;display:flex;flex-direction:column">
+      <div class="panel-title" style="justify-content:space-between">
+        📟 Consola
+        <button class="btn btn-sm" onclick="limpiarLog()">Limpiar</button>
+      </div>
+      <div class="log-wrap" id="log-wrap"></div>
+    </div>
+
+    <!-- Publicar -->
+    <button class="btn btn-primary full-btn" id="btn-publicar" onclick="publicar()" disabled>
+      🚀 Publicar en Firepaste
+    </button>
+  </div>
+</div>
+
+<!-- ══ MODAL CONFIG ══ -->
+<div class="modal-bg" id="modal-config">
+  <div class="modal">
+    <h3>⚙️ Configuración</h3>
+    <div class="field"><label>URL del panel (termina en /admin)</label><input type="text" id="cfg-url" placeholder="https://tu-web.com/admin" /></div>
+    <div class="field">
+      <label>Bot API Token <small style="color:#aaa">(BOT_API_TOKEN en tu .env de Firepaste)</small></label>
+      <input type="password" id="cfg-bot-token" placeholder="token_secreto_largo" />
+    </div>
+    <div class="modal-btns">
+      <button class="btn" onclick="cerrarModal('modal-config')">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarConfig()">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL HISTORIAL ══ -->
+<div class="modal-bg" id="modal-historial">
+  <div class="modal" style="width:600px;max-height:80vh;display:flex;flex-direction:column">
+    <h3>📋 Historial de posts</h3>
+    <div style="overflow-y:auto;flex:1;background:var(--bg3);border-radius:8px;border:1px solid var(--border)" id="historial-list"></div>
+    <div class="modal-btns"><button class="btn" onclick="cerrarModal('modal-historial')">Cerrar</button></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  Estado global
+// ═══════════════════════════════════════════
+let archivos = [];
+let postListo = null;
+let patrones = { catalogos: {}, sitios: {}, total: 0 };
+
+async function py(fn, ...args) { return await window.pywebview.api[fn](...args); }
+
+window.addEventListener('pywebviewready', async () => {
+  const cfg = await py('get_config');
+  if (cfg) cargarConfig(cfg);
+  await refrescarPatrones();
+  await cargarCatalogosAPI();
+  if (!cfg.configurado) abrirConfig();
+  log('info', '🔥 Firepaste Bot listo');
+});
+
+window._logScrape = function(msg) { log('info', msg); };
+
+// ── Tabs ──
+function cambiarTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Log ──
+function log(tipo, msg) {
+  const wrap = document.getElementById('log-wrap');
+  const cls = { ok:'log-ok', err:'log-err', warn:'log-warn', info:'log-info' }[tipo] || 'log-def';
+  const div = document.createElement('div');
+  div.className = `log-line ${cls}`;
+  div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  wrap.appendChild(div); wrap.scrollTop = wrap.scrollHeight;
+}
+function limpiarLog() { document.getElementById('log-wrap').innerHTML = ''; }
+
+// ── Progreso ──
+function setProgress(pct, label) {
+  const s = document.getElementById('progress-section');
+  s.style.display = pct > 0 ? 'block' : 'none';
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = label || '';
+}
+
+// ── Patrones ──
+async function refrescarPatrones() {
+  patrones = await py('get_patrones');
+  document.getElementById('stat-total').textContent = patrones.total || 0;
+  const cats = Object.entries(patrones.catalogos || {}).sort((a,b)=>b[1]-a[1]);
+  const sitios = Object.entries(patrones.sitios || {}).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('stat-cat').textContent = cats[0]?.[0] || '—';
+  document.getElementById('stat-sitio').textContent = sitios[0]?.[0] || '—';
+  ['chips-cats-url','chips-cats-m'].forEach(id => {
+    const el = document.getElementById(id); el.innerHTML = '';
+    cats.slice(0,6).forEach(([c]) => {
+      const ch = document.createElement('span');
+      ch.className = 'chip cat'; ch.textContent = c;
+      ch.onclick = () => {
+        const csId = id.includes('url') ? 'cs-cat-url' : 'cs-cat-m';
+        const inputId = id.includes('url') ? 'inp-cat-url' : 'inp-cat-m';
+        if (!_catalogos.includes(c)) _catalogos.push(c);
+        renderDropdown(csId, _catalogos, c);
+        selectOption(csId, inputId, c, c, false);
+      };
+      el.appendChild(ch);
+    });
+  });
+  const sEl = document.getElementById('chips-sitios'); sEl.innerHTML = '';
+  sitios.slice(0,5).forEach(([s]) => {
+    const ch = document.createElement('span');
+    ch.className = 'chip sitio'; ch.textContent = s;
+    ch.onclick = () => document.getElementById('inp-url').value = s;
+    sEl.appendChild(ch);
+  });
+}
+
+// ── Escanear ──
+async function escanear() {
+  const url = document.getElementById('inp-url').value.trim();
+  if (!url) { log('warn', '⚠️ Ingresa una URL'); return; }
+  archivos = []; postListo = null;
+  document.getElementById('btn-publicar').disabled = true;
+  document.getElementById('archivos-list').innerHTML = '<div class="archivos-empty"><span class="spinner"></span> Abriendo Chromium y escaneando...</div>';
+  document.getElementById('badge-n').textContent = '';
+  setProgress(15, 'Iniciando navegador...');
+  log('info', `🔍 Scraping: ${url}`);
+  const result = await py('escanear_url', url);
+  setProgress(0,'');
+  if (!result || result.error) {
+    log('err', `❌ ${result?.error || 'Error'}`);
+    document.getElementById('archivos-list').innerHTML = '<div class="archivos-empty">❌ No se encontraron archivos</div>';
+    return;
+  }
+  archivos = result.archivos;
+  log('ok', `✅ ${archivos.length} archivos encontrados`);
+  renderArchivos(archivos);
+  // Rellenar título: primero usamos el título real extraído del HTML,
+  // si no hay, intentamos derivar algo del path de la URL.
+  const inp = document.getElementById('inp-titulo-url');
+  if (!inp.value) {
+    if (result.titulo) {
+      inp.value = result.titulo;
+    } else {
+      try {
+        const partes = new URL(url).pathname.split('/').filter(Boolean);
+        const ultimo = decodeURIComponent(partes[partes.length-1]||'').replace(/[-_]/g,' ').replace(/\.[^.]+$/,'');
+        if (ultimo && !/^\d+$/.test(ultimo.trim())) inp.value = toTitleCase(ultimo);
+      } catch(e) {}
+    }
+  }
+}
+
+function renderArchivos(lista) {
+  const el = document.getElementById('archivos-list');
+  document.getElementById('badge-n').textContent = `(${lista.length})`;
+  if (!lista.length) { el.innerHTML = '<div class="archivos-empty">Sin archivos</div>'; return; }
+  el.innerHTML = lista.slice(0,50).map(a => `
+    <div class="archivo-item">
+      <span class="archivo-nombre">📄 ${a.nombre}</span>
+      <span class="archivo-size">${a.size||''}</span>
+    </div>`).join('') + (lista.length>50?`<div class="archivo-item" style="color:var(--text2)">... y ${lista.length-50} más</div>`:'');
+}
+
+// ── Descargar + subir a nube ──
+async function publicarDirecto() {
+  // Publica usando los links originales sin descargar nada
+  if (!archivos.length) { log('warn','⚠️ Escanea primero'); return; }
+  const titulo = document.getElementById('inp-titulo-url').value.trim();
+  const cat    = document.getElementById('inp-cat-url').value.trim();
+  if (!titulo) { log('warn','⚠️ Ingresa el nombre del juego'); return; }
+  if (!cat)    { log('warn','⚠️ Ingresa el catálogo'); return; }
+
+  log('info','⚡ Generando tabla directa (sin descargar)...');
+  const r = await py('generar_tabla_directa', archivos);
+  if (!r.ok) { log('err',`❌ ${r.error}`); return; }
+
+  log('info','🤖 Generando título con IA...');
+  const ia = await py('generar_ia', titulo, cat);
+
+  postListo = {
+    titulo:        ia.titulo || titulo,
+    pestana:       ia.pestana || 'Free Download',
+    catalogo:      cat,
+    contenido_html: r.tabla_html,
+    is_vip:        document.getElementById('vip-url').checked,
+    is_published:  document.getElementById('published-url').checked,
+    sitio:         (() => { try { return new URL(document.getElementById('inp-url').value).hostname; } catch(e){ return ''; } })()
+  };
+
+  mostrarPreview(postListo);
+  document.getElementById('btn-publicar').disabled = false;
+  log('ok',`✅ Listo — clic en "Publicar en Firepaste"`);
+}
+
+// ── Generar IA ──
+async function generarIA(tablaHtml) {
+  const titulo = document.getElementById('inp-titulo-url').value.trim() || archivos[0]?.nombre || '';
+  const cat    = document.getElementById('inp-cat-url').value.trim();
+  if (!cat) { log('warn','⚠️ Ingresa el catálogo'); return; }
+
+  setProgress(60,'Generando título con IA...');
+  log('info','🤖 Llamando a Claude...');
+  const r = await py('generar_ia', titulo, cat);
+  setProgress(0,'');
+  if (r.error) { log('err',`❌ IA: ${r.error}`); return; }
+
+  postListo = {
+    ...postListo,
+    titulo: r.titulo, pestana: r.pestana, catalogo: cat,
+    contenido_html: tablaHtml || postListo?.contenido_html || '',
+    is_vip:        document.getElementById('vip-url').checked,
+    is_published:  document.getElementById('published-url').checked,
+    sitio: (() => { try { return new URL(document.getElementById('inp-url').value).hostname; } catch(e){ return ''; } })()
+  };
+
+  mostrarPreview(postListo);
+  document.getElementById('btn-publicar').disabled = false;
+  log('ok', `✅ Listo para publicar: ${r.titulo}`);
+}
+
+function mostrarPreview(post) {
+  const vip = post.is_vip ? '<span class="badge badge-vip">🔒 VIP</span>' : '<span class="badge badge-pub">🌐 Público</span>';
+  const pub = post.is_published !== false ? '<span class="badge badge-ok">✅ Publicado</span>' : '<span class="badge" style="background:#2a0a0a;color:var(--red)">🚫 Borrador</span>';
+  document.getElementById('preview-box').innerHTML = `
+    <div class="preview-titulo">${post.titulo}</div>
+    <div class="preview-meta" style="margin-bottom:8px">📁 ${post.catalogo} &nbsp;•&nbsp; ${vip} &nbsp;•&nbsp; ${pub}</div>
+    <div class="preview-meta">📄 ${archivos.length} archivos con links de descarga</div>`;
+}
+
+// ── Manual ──
+function prepararManual() {
+  const titulo  = document.getElementById('inp-titulo-m').value.trim();
+  const pestana = document.getElementById('inp-pestana-m').value.trim() || 'Free Download';
+  const cat     = document.getElementById('inp-cat-m').value.trim();
+  const raw     = document.getElementById('inp-links').value.trim();
+  if (!titulo || !cat) { log('warn','⚠️ Completa título y catálogo'); return; }
+  if (!raw) { log('warn','⚠️ Agrega al menos un link'); return; }
+  const lineas = raw.split('\n').filter(l=>l.trim());
+  archivos = lineas.map(l => {
+    const p = l.split('|').map(x=>x.trim());
+    return { nombre:p[0], url:p[1]||'', size:p[2]||'' };
+  }).filter(a=>a.nombre);
+  const tabla = buildTablaSimple(archivos);
+  postListo = { titulo, pestana, catalogo: cat, contenido_html: tabla, is_vip: document.getElementById('vip-m').checked, is_published: document.getElementById('published-m').checked, sitio:'' };
+  mostrarPreview(postListo);
+  document.getElementById('btn-publicar').disabled = false;
+  log('ok', `✅ Post manual preparado con ${archivos.length} archivos`);
+}
+
+function buildTablaSimple(lista) {
+  const filas = lista.map(a=>`<tr><td><a href="${a.url}" target="_blank" rel="nofollow">${a.nombre}</a></td><td>${a.size||'—'}</td></tr>`).join('');
+  return `<table><thead><tr><th>File Name</th><th>Size</th></tr></thead><tbody>${filas}</tbody></table>`;
+}
+
+// ── Publicar ──
+async function publicar() {
+  if (!postListo) { log('warn','⚠️ Prepara el post primero'); return; }
+  if (!postListo.contenido_html) { log('warn','⚠️ Falta el contenido (tabla de archivos)'); return; }
+  const btn = document.getElementById('btn-publicar');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Publicando...';
+  setProgress(10,'Iniciando Filament...');
+  window._progreso = (pct, msg) => { setProgress(pct, msg); log('info', msg); };
+  const r = await py('publicar_post', postListo);
+  setProgress(0,'');
+  if (r.ok) {
+    log('ok','🎉 ¡Post publicado en Firepaste!');
+    await refrescarPatrones();
+    postListo = null; archivos = [];
+    document.getElementById('preview-box').innerHTML = '<div class="preview-empty">Post publicado ✅</div>';
+    btn.innerHTML = '🚀 Publicar en Firepaste';
+  } else {
+    log('err', `❌ ${r.error}`);
+    btn.disabled = false; btn.innerHTML = '🚀 Publicar en Firepaste';
+  }
+}
+
+// ── Custom Dropdown ──
+let _catalogos = [];
+
+function toggleDropdown(csId) {
+  const trigger  = document.getElementById(csId + '-trigger');
+  const dropdown = document.getElementById(csId + '-dropdown');
+  const isOpen   = dropdown.classList.contains('open');
+  // Cerrar todos los dropdowns abiertos
+  document.querySelectorAll('.custom-select-dropdown.open').forEach(d => d.classList.remove('open'));
+  document.querySelectorAll('.custom-select-trigger.open').forEach(t => t.classList.remove('open'));
+  if (!isOpen) { trigger.classList.add('open'); dropdown.classList.add('open'); }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.custom-select')) {
+    document.querySelectorAll('.custom-select-dropdown.open').forEach(d => d.classList.remove('open'));
+    document.querySelectorAll('.custom-select-trigger.open').forEach(t => t.classList.remove('open'));
+  }
+});
+
+function renderDropdown(csId, catalogs, currentValue) {
+  const inputId  = csId === 'cs-cat-url' ? 'inp-cat-url' : 'inp-cat-m';
+  const dropdown = document.getElementById(csId + '-dropdown');
+  const trigger  = document.getElementById(csId + '-trigger');
+  dropdown.innerHTML = '';
+
+  // Placeholder
+  const ph = document.createElement('div');
+  ph.className = 'custom-select-option placeholder' + (currentValue === '' ? ' selected' : '');
+  ph.textContent = '— Selecciona un catálogo —';
+  ph.onclick = () => selectOption(csId, inputId, '', '— Selecciona un catálogo —', true);
+  dropdown.appendChild(ph);
+
+  // Catálogos
+  catalogs.forEach(cat => {
+    const opt = document.createElement('div');
+    opt.className = 'custom-select-option' + (currentValue === cat ? ' selected' : '');
+    opt.textContent = cat;
+    opt.onclick = () => selectOption(csId, inputId, cat, cat, false);
+    dropdown.appendChild(opt);
+  });
+
+  // Nuevo
+  const nuevo = document.createElement('div');
+  nuevo.className = 'custom-select-option nuevo';
+  nuevo.textContent = '➕ Nuevo catálogo...';
+  nuevo.onclick = () => {
+    const nombre = prompt('Nombre del nuevo catálogo:');
+    if (nombre && nombre.trim()) {
+      const v = nombre.trim();
+      if (!_catalogos.includes(v)) _catalogos.push(v);
+      renderDropdown(csId, _catalogos, v);
+      selectOption(csId, inputId, v, v, false);
+    }
+    document.getElementById(csId + '-dropdown').classList.remove('open');
+    document.getElementById(csId + '-trigger').classList.remove('open');
+  };
+  dropdown.appendChild(nuevo);
+}
+
+function selectOption(csId, inputId, value, label, isPlaceholder) {
+  document.getElementById(inputId).value = value;
+  const labelEl = document.getElementById(csId + '-label');
+  labelEl.textContent = label;
+  labelEl.style.color = isPlaceholder ? 'var(--text2)' : 'var(--text)';
+  labelEl.style.fontStyle = isPlaceholder ? 'italic' : 'normal';
+  document.getElementById(csId + '-dropdown').classList.remove('open');
+  document.getElementById(csId + '-trigger').classList.remove('open');
+  // Sincronizar el otro dropdown con los mismos datos
+  const otherId = csId === 'cs-cat-url' ? 'cs-cat-m' : 'cs-cat-url';
+  renderDropdown(otherId, _catalogos, document.getElementById(otherId === 'cs-cat-url' ? 'inp-cat-url' : 'inp-cat-m').value);
+}
+
+// ── Cargar catálogos desde API Firepaste ──
+async function cargarCatalogosAPI() {
+  try {
+    const cfg = await py('get_config');
+    const baseUrl = (cfg.url_panel || '').replace(/\/admin\/?$/, '');
+    const token   = cfg.bot_api_token || '';
+    if (!baseUrl || !token) return;
+
+    const resp = await fetch(baseUrl + '/api/bot/catalogs', {
+      headers: { 'X-Bot-Token': token, 'Accept': 'application/json' }
+    });
+    if (!resp.ok) { log('warn', '⚠️ No se pudieron cargar los catálogos'); return; }
+    const data = await resp.json();
+    if (!data.ok || !Array.isArray(data.catalogs)) return;
+
+    _catalogos = data.catalogs.map(c => c.nombre);
+    ['cs-cat-url', 'cs-cat-m'].forEach(csId => {
+      const inputId = csId === 'cs-cat-url' ? 'inp-cat-url' : 'inp-cat-m';
+      renderDropdown(csId, _catalogos, document.getElementById(inputId).value);
+    });
+
+    log('ok', `✅ ${_catalogos.length} catálogos cargados`);
+  } catch(e) {
+    log('warn', '⚠️ Error al cargar catálogos: ' + e.message);
+  }
+}
+
+// ── Limpiar historial ──
+async function abrirLimpiar() {
+  document.getElementById('modal-limpiar').classList.add('open');
+}
+async function limpiarHistorial() {
+  await py('limpiar_historial');
+  await refrescarPatrones();
+  log('ok', '🗑️ Historial limpiado');
+  cerrarModal('modal-limpiar');
+}
+async function limpiarPatrones() {
+  await py('limpiar_patrones');
+  await refrescarPatrones();
+  log('ok', '🗑️ Estadísticas/patrones limpiados');
+  cerrarModal('modal-limpiar');
+}
+async function limpiarTodo() {
+  await py('limpiar_historial');
+  await py('limpiar_patrones');
+  await refrescarPatrones();
+  log('ok', '🗑️ Todo limpiado');
+  cerrarModal('modal-limpiar');
+}
+
+// ── Config ──
+async function abrirConfig() {
+  const cfg = await py('get_config'); cargarConfig(cfg);
+  document.getElementById('modal-config').classList.add('open');
+}
+function cargarConfig(cfg) {
+  document.getElementById('cfg-url').value   = cfg.url_panel||'';
+  document.getElementById('cfg-bot-token').value = cfg.bot_api_token||'';
+}
+async function guardarConfig() {
+  const cfg = {
+    url_panel: document.getElementById('cfg-url').value,
+    bot_api_token: document.getElementById('cfg-bot-token').value.trim(),
+    configurado: true
+  };
+  await py('save_config', cfg);
+  cerrarModal('modal-config');
+  log('ok','✅ Configuración guardada');
+  await cargarCatalogosAPI();
+}
+
+
+
+// ── Historial ──
+async function abrirHistorial() {
+  const hist = await py('get_historial');
+  const el = document.getElementById('historial-list');
+  if (!hist.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">Sin historial aún</div>'; }
+  else el.innerHTML = hist.map(h => `
+    <div class="hist-item">
+      <div class="hist-titulo">${h.titulo||'?'}</div>
+      <div class="hist-meta">
+        <span>📁 ${h.catalogo||'?'}</span>
+        <span>${h.is_vip?'🔒 VIP':'🌐 Público'}</span>
+        <span>${(h.fecha||'').slice(0,16)}</span>
+      </div>
+    </div>`).join('');
+  document.getElementById('modal-historial').classList.add('open');
+}
+
+function cerrarModal(id) { document.getElementById(id).classList.remove('open'); }
+function updatePublishedLabel(tab) {
+  const chk = document.getElementById('published-' + tab);
+  const lbl = document.getElementById('published-' + tab + '-label');
+  if (chk.checked) {
+    lbl.textContent = '✅ Publicado';
+    lbl.style.color = 'var(--green)';
+  } else {
+    lbl.textContent = '🚫 Borrador (no visible)';
+    lbl.style.color = 'var(--red)';
+  }
+}
+
+function toTitleCase(s) { return s.replace(/\w\S*/g, t=>t[0].toUpperCase()+t.slice(1).toLowerCase()); }
+</script>
+
+</body>
