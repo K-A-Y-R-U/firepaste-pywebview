@@ -1,79 +1,85 @@
-# 🔥 Firepaste Bot — PyWebView
+<div align="center">
 
-> Herramienta de escritorio para automatizar la publicación de posts en [Firepaste.com](https://firepaste.com), con scraping inteligente de sitios de ROMs y subida automática a múltiples plataformas cloud.
+```
+███████╗██╗██████╗ ███████╗██████╗  █████╗ ███████╗████████╗███████╗
+██╔════╝██║██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔════╝╚══██╔══╝██╔════╝
+█████╗  ██║██████╔╝█████╗  ██████╔╝███████║███████╗   ██║   █████╗  
+██╔══╝  ██║██╔══██╗██╔══╝  ██╔═══╝ ██╔══██║╚════██║   ██║   ██╔══╝  
+██║     ██║██║  ██║███████╗██║     ██║  ██║███████║   ██║   ███████╗
+╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝
+                                                                      
+██████╗  ██████╗ ████████╗                                            
+██╔══██╗██╔═══██╗╚══██╔══╝                                            
+██████╔╝██║   ██║   ██║                                               
+██╔══██╗██║   ██║   ██║                                               
+██████╔╝╚██████╔╝   ██║                                               
+╚═════╝  ╚═════╝    ╚═╝                                               
+```
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)
-![PyWebView](https://img.shields.io/badge/PyWebView-5.x-orange)
-![Playwright](https://img.shields.io/badge/Playwright-Chromium-green?logo=playwright)
-![License](https://img.shields.io/badge/License-MIT-lightgrey)
+### 🔥 Coded with ☕ coffee & 🌿 good vibes
 
----
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![PyWebView](https://img.shields.io/badge/PyWebView-Desktop-FF6B35?style=for-the-badge&logo=windowsterminal&logoColor=white)](https://pywebview.flowrl.com)
+[![Playwright](https://img.shields.io/badge/Playwright-Chromium-45BA4B?style=for-the-badge&logo=playwright&logoColor=white)](https://playwright.dev)
+[![GitHub](https://img.shields.io/badge/GitHub-K--A--Y--R--U-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/K-A-Y-R-U)
 
-## 📋 Tabla de Contenidos
+> *Hecho a las 2am con café cargado y buena música 🎵*  
+> *Automatiza tus posts en Firepaste mientras te relajas 😎*
 
-- [¿Qué hace?](#-qué-hace)
-- [Arquitectura](#-arquitectura)
-- [Requisitos](#-requisitos)
-- [Instalación](#-instalación)
-- [Uso](#-uso)
-- [Configuración](#-configuración)
-- [Sitios soportados](#-sitios-soportados)
-- [Plataformas cloud](#-plataformas-cloud)
-- [Estructura del proyecto](#-estructura-del-proyecto)
-- [API interna (JS ↔ Python)](#-api-interna-js--python)
-
----
-
-## ✨ ¿Qué hace?
-
-**Firepaste Bot** es una aplicación de escritorio que combina una interfaz web (HTML/JS) con un backend Python. Permite:
-
-1. **Escanear** una URL de un sitio de ROMs o de firepaste.com y extraer automáticamente la lista de archivos disponibles (nombre, URL, tamaño).
-2. **Descargar** esos archivos localmente.
-3. **Re-subir** los archivos a servicios cloud (GoFile, MediaFire, Mega, Google Drive).
-4. **Generar** una tabla HTML con los links formateada según el estilo de Firepaste.
-5. **Publicar** el post directamente en Firepaste vía la API REST del bot, con título, catálogo y pestaña.
-6. **Llevar un historial** de todos los posts publicados y aprender patrones de catálogos/sitios usados frecuentemente.
+</div>
 
 ---
 
-## 🏗 Arquitectura
+## 🌿 ¿Qué hace este bicho?
+
+**Firepaste Bot** es una app de escritorio que te permite:
+
+- 🕷️ **Scrapear** cualquier sitio de ROMs y extraer la lista de archivos automáticamente
+- ☁️ **Re-subir** los archivos a GoFile, MediaFire, Mega o Google Drive
+- 📝 **Publicar** posts en Firepaste con tabla HTML formateada y todo
+- 🧠 **Aprender** tus patrones de catálogos y sitios favoritos
+- 📜 **Historial** de todo lo que has publicado
+
+Todo desde una ventana de escritorio. Sin terminal. Sin drama. ✌️
+
+---
+
+## 🏗️ Cómo está armado
 
 ```
 firepaste-pywebview/
 │
-├── main.py          # Backend Python: scraper + API expuesta al JS
-├── uploader.py      # Descarga de archivos + subida a plataformas cloud
+├── 🐍 main.py          → Backend Python (scraper + API para el JS)
+├── ☁️  uploader.py      → Descarga archivos y los sube a la nube
 │
-└── ui/
-    └── index.html   # Frontend completo (HTML + CSS + JS vanilla)
+└── 🎨 ui/
+    └── index.html      → Frontend completo (HTML + CSS + JS vanilla)
 ```
 
-La aplicación usa **PyWebView** para abrir una ventana nativa del SO que renderiza `index.html`. El JavaScript del frontend llama a métodos Python directamente a través del objeto `window.pywebview.api`, sin servidor HTTP de por medio.
+**PyWebView** abre una ventana nativa que renderiza `index.html`.  
+El JS llama métodos Python directamente via `window.pywebview.api` — sin servidor, sin complicaciones.
 
 ```
-[HTML/JS UI]  ←→  pywebview.api.*  ←→  [Python backend]
-                                              ├── requests / BeautifulSoup  (scraping liviano)
-                                              ├── Playwright + Chromium      (scraping JS-heavy)
-                                              └── GoFile / MediaFire / Mega / Drive API
+[HTML/JS UI]  ←→  pywebview.api  ←→  [Python]
+                                         ├── requests + BeautifulSoup  (sitios estáticos)
+                                         ├── Playwright + Chromium      (sitios con JS)
+                                         └── GoFile / MediaFire / Mega / Drive
 ```
 
 ---
 
 ## ⚙️ Requisitos
 
-- Python 3.10 o superior
-- Fedora Linux (el script `instalar.sh` usa `dnf`) — adaptable a Debian/Ubuntu con `apt`
-- Conexión a internet
+- 🐍 Python 3.10+
+- 🌐 Conexión a internet
+- ☕ Un café (opcional pero recomendado)
 
-### Dependencias Python
-
-| Paquete | Uso |
+| Paquete | Para qué |
 |---|---|
-| `pywebview` | Ventana de escritorio con WebKit |
-| `requests` | HTTP liviano para scraping y APIs |
-| `beautifulsoup4` | Parsing de HTML estático |
-| `playwright` | Scraping de sitios con JavaScript |
+| `pywebview` | Ventana de escritorio |
+| `requests` | HTTP y APIs |
+| `beautifulsoup4` | Parsear HTML |
+| `playwright` | Sitios con JavaScript |
 | `mediafire` | Subida a MediaFire *(opcional)* |
 | `mega.py` | Subida a Mega.nz *(opcional)* |
 | `google-api-python-client` | Subida a Google Drive *(opcional)* |
@@ -82,117 +88,74 @@ La aplicación usa **PyWebView** para abrir una ventana nativa del SO que render
 
 ## 🚀 Instalación
 
-### Instalación rápida (Fedora/RHEL)
+### 🐧 Linux — Fedora/RHEL (instalación rápida)
 
 ```bash
-git clone https://github.com/TU_USUARIO/firepaste-pywebview.git
+git clone https://github.com/K-A-Y-R-U/firepaste-pywebview.git
 cd firepaste-pywebview
 chmod +x instalar.sh
 ./instalar.sh
 ```
 
-El script `instalar.sh` instala automáticamente todas las dependencias del sistema y de Python, incluyendo el binario de Chromium para Playwright.
+El script instala todo solo: dependencias del sistema, paquetes Python y Chromium para Playwright.
 
-### Instalación manual
+### 🐧 Linux — Ubuntu/Debian
 
 ```bash
-# Dependencias del sistema (Fedora)
-sudo dnf install -y python3-pip python3-devel \
-  webkit2gtk4.1 webkit2gtk4.1-devel \
-  gobject-introspection gobject-introspection-devel \
-  gtk3 gtk3-devel cairo-devel
+sudo apt install -y python3-pip python3-dev libwebkit2gtk-4.0-dev libgtk-3-dev
 
-# Dependencias Python
 pip3 install --user pywebview requests beautifulsoup4 playwright
-
-# Chromium para Playwright
 python3 -m playwright install chromium
 ```
 
-### Instalación en Windows
+### 🪟 Windows
 
-> La app fue desarrollada en Linux, pero puede correr en Windows con algunas dependencias adicionales.
+> La app fue desarrollada en Linux pero corre bien en Windows.
 
-**1. Instala Python 3.10+**
-Descarga desde → https://www.python.org/downloads/windows/
-Durante la instalación marca ✅ **"Add Python to PATH"**
+**1.** Instala Python 3.10+ desde → https://www.python.org/downloads/windows/  
+*(marca ✅ "Add Python to PATH" durante la instalación)*
 
-**2. Instala las dependencias**
-Abre **PowerShell** o **CMD** y ejecuta:
+**2.** Abre PowerShell y ejecuta:
 
 ```powershell
 pip install pywebview requests beautifulsoup4 playwright
 python -m playwright install chromium
 ```
 
-**3. Instala el runtime de WebKit para PyWebView**
-PyWebView en Windows usa Edge WebView2. Descárgalo desde:
+**3.** Instala el runtime **Edge WebView2** (necesario para PyWebView en Windows):  
 → https://developer.microsoft.com/en-us/microsoft-edge/webview2/
 
-**4. Ejecuta la app**
+**4.** Lanza la app:
+
 ```powershell
 cd C:\ruta\a\firepaste-pywebview
 python main.py
 ```
 
-> **Nota:** Los scripts `instalar.sh` y `abrir.sh` son solo para Linux. En Windows usa los comandos de arriba directamente.
-
----
-
-### Instalación manual (Ubuntu/Debian)
-
-```bash
-sudo apt install -y python3-pip python3-dev \
-  libwebkit2gtk-4.0-dev libgtk-3-dev
-
-pip3 install --user pywebview requests beautifulsoup4 playwright
-python3 -m playwright install chromium
-```
+> Los scripts `instalar.sh` y `abrir.sh` son solo para Linux. En Windows usa los comandos de arriba.
 
 ---
 
 ## ▶️ Uso
 
 ```bash
+# Linux
 ./abrir.sh
-# o directamente:
+
+# O directamente
 python3 main.py
 ```
 
-Se abrirá una ventana de escritorio con la interfaz del bot.
-
 ### Flujo básico
 
-1. Ve a **Configuración** e ingresa la URL de tu panel de Firepaste y el `BOT_API_TOKEN`.
-2. En la pantalla principal, pega la URL del sitio que quieres escanear.
-3. El bot extrae la lista de archivos automáticamente.
-4. Completa el título, catálogo y pestaña (o usa el **autocompletado inteligente**).
-5. Elige si publicar los links directamente o descargar y re-subir a cloud primero.
-6. Haz clic en **Publicar** — el post aparecerá en Firepaste en segundos.
-
----
-
-## 🔧 Configuración
-
-Los datos se guardan en archivos JSON en el directorio home del usuario:
-
-| Archivo | Contenido |
-|---|---|
-| `~/.firepaste_config.json` | URL del panel, credenciales de cloud, token del bot |
-| `~/.firepaste_history.json` | Historial de posts publicados (máx. 200) |
-| `~/.firepaste_patterns.json` | Patrones aprendidos de catálogos y sitios |
-
-### Parámetros de configuración principales
-
-```json
-{
-  "url_panel": "https://firepaste.com/admin",
-  "bot_api_token": "TU_TOKEN_AQUI",
-  "headless": false
-}
 ```
-
-El `bot_api_token` se configura en el archivo `.env` de tu instalación de Firepaste con la variable `BOT_API_TOKEN`.
+1. 🔧 Configuración  →  URL del panel + BOT_API_TOKEN
+2. 🔗 Pega la URL   →  del sitio que quieres scrapear
+3. 🕷️ Escanear      →  extrae lista de archivos automáticamente
+4. ✏️  Completar     →  título, catálogo, pestaña (o usa el autocompletado)
+5. ☁️  Subir         →  a cloud o publicar links directos
+6. 🚀 Publicar      →  el post aparece en Firepaste al instante
+```
 
 ---
 
@@ -200,87 +163,106 @@ El `bot_api_token` se configura en el archivo `.env` de tu instalación de Firep
 
 | Sitio | Método | Notas |
 |---|---|---|
-| **firepaste.com** | `requests` + BeautifulSoup | Scraping directo de HTML estático |
-| **romsfun.com** | `requests` + BeautifulSoup + Playwright | Soporta páginas de juego, listas y countdowns |
-| **Sitios genéricos** | Playwright (Chromium headless) | Detecta tablas de archivos y links por extensión |
-
-El scraper detecta automáticamente el sitio y usa la estrategia más eficiente. Para sitios con JavaScript (countdowns, carga dinámica), recurre a Playwright con Chromium.
+| 🔥 **firepaste.com** | requests + BS4 | HTML estático, rápido |
+| 🎮 **romsfun.com** | requests + BS4 + Playwright | Soporta páginas de juego, listas y countdowns |
+| 🌍 **Sitios genéricos** | Playwright headless | Detecta tablas y links por extensión |
 
 ---
 
 ## ☁️ Plataformas cloud
 
-| Plataforma | Requiere cuenta | Configuración |
+| Plataforma | Cuenta requerida | Config |
 |---|---|---|
-| **GoFile** | No (guest) / Opcional | Token GoFile para carpetas organizadas |
-| **MediaFire** | Sí | Email + contraseña |
-| **Mega.nz** | Sí | Email + contraseña |
-| **Google Drive** | Sí | `credentials.json` de Google Cloud Console |
-
-Los archivos subidos a GoFile sin cuenta se agrupan en la misma carpeta usando el `guestToken` y `folderId` compartidos entre archivos del mismo juego.
+| 🟠 **GoFile** | No (guest) / Opcional | Token para carpetas organizadas |
+| 🔵 **MediaFire** | Sí | Email + contraseña |
+| 🔴 **Mega.nz** | Sí | Email + contraseña |
+| 🟢 **Google Drive** | Sí | `credentials.json` de Google Cloud Console |
 
 ---
 
-## 📁 Estructura del proyecto
+## 🔧 Configuración
 
+Los datos se guardan en JSON en el home del usuario:
+
+| Archivo | Contenido |
+|---|---|
+| `~/.firepaste_config.json` | URL del panel, tokens, credenciales cloud |
+| `~/.firepaste_history.json` | Historial de posts (máx. 200) |
+| `~/.firepaste_patterns.json` | Patrones aprendidos |
+
+```json
+{
+  "url_panel": "https://firepaste.com/admin",
+  "bot_api_token": "TU_TOKEN_AQUI"
+}
 ```
-firepaste-pywebview/
-├── main.py              # Backend principal
-│   ├── _es_firepaste()      # Detecta URLs de firepaste.com
-│   ├── _scrape_firepaste()  # Scraper liviano para firepaste.com
-│   ├── scrape_url()         # Scraper unificado (despacha por sitio)
-│   ├── bot_publicar()       # Publica post via API REST
-│   └── API (clase)          # Métodos expuestos al frontend JS
-│
-├── uploader.py          # Módulo de descarga y subida
-│   ├── descargar_archivo()  # Descarga con barra de progreso
-│   ├── subir_gofile()       # Upload a GoFile (con/sin cuenta)
-│   ├── subir_mediafire()    # Upload a MediaFire
-│   ├── subir_mega()         # Upload a Mega.nz
-│   ├── subir_drive()        # Upload a Google Drive
-│   ├── procesar_archivos()  # Orquesta descarga + subida de toda la lista
-│   ├── build_tabla_resultados()  # HTML con links de cloud
-│   └── build_tabla_directa()    # HTML con links originales
-│
-├── ui/
-│   └── index.html       # Interfaz completa (SPA vanilla JS)
-│
-├── instalar.sh          # Instalador para Fedora/RHEL
-└── abrir.sh             # Lanzador rápido
-```
+
+El `bot_api_token` se configura en el `.env` de tu Firepaste con `BOT_API_TOKEN`.
 
 ---
 
 ## 🔌 API interna (JS ↔ Python)
 
-El frontend llama a estos métodos Python via `window.pywebview.api.*`:
-
-| Método | Descripción |
+| Método | Qué hace |
 |---|---|
-| `get_config()` | Carga la configuración guardada |
-| `save_config(cfg)` | Guarda la configuración |
-| `escanear_url(url)` | Escanea una URL y devuelve `{archivos, titulo}` |
-| `generar_ia(titulo, catalogo)` | Genera título limpio y pestaña automáticamente |
-| `generar_tabla_directa(archivos)` | Genera tabla HTML con links originales |
-| `publicar_post(datos)` | Publica el post en Firepaste via API REST |
-| `get_historial()` | Devuelve el historial de publicaciones |
+| `get_config()` | Carga la config guardada |
+| `save_config(cfg)` | Guarda la config |
+| `escanear_url(url)` | Escanea URL → devuelve `{archivos, titulo}` |
+| `generar_ia(titulo, catalogo)` | Genera título limpio + pestaña automáticamente |
+| `generar_tabla_directa(archivos)` | HTML con links originales |
+| `publicar_post(datos)` | Publica en Firepaste via API REST |
+| `get_historial()` | Historial de publicaciones |
 | `limpiar_historial()` | Borra el historial |
-| `get_patrones()` | Devuelve los patrones aprendidos |
-| `limpiar_patrones()` | Reinicia los patrones |
-
-El progreso en tiempo real se envía al JS via `window.evaluate_js()` llamando a callbacks globales (`window._logScrape`, `window._progreso`).
 
 ---
 
-## 📝 Notas
+## 🐛 Problemas conocidos
 
-- Los archivos descargados se guardan en `~/firepaste_downloads/`. Si un archivo ya existe, se reutiliza (caché local).
-- El historial guarda los últimos 200 posts publicados.
-- La generación de título/pestaña limpia nombres de ROMs: elimina extensiones, códigos de región `(USA)`, tags `[!]`, y aplica Title Case.
-- El modo **tabla directa** (sin descargar) es útil para publicar links externos de romsfun directamente en Firepaste sin pasar por cloud.
+| Problema | Causa probable | Solución |
+|---|---|---|
+| Ventana no abre / error WebKit | Falta webkit2gtk en Linux | `sudo dnf install webkit2gtk4.1` |
+| Error WebView2 en Windows | Runtime no instalado | Instala Edge WebView2 desde el link de arriba |
+| Playwright no encuentra Chromium | No se instaló el browser | `python3 -m playwright install chromium` |
+| `ksshaskpass` pide contraseña en KDE | KDE intercepta git | `unset SSH_ASKPASS GIT_ASKPASS` antes del push |
+| Token inválido en git push | Token expirado o mal pegado | Crea uno nuevo en github.com/settings/tokens |
+| Scraper no encuentra archivos | Sitio cambió su HTML | Abre un issue en el repo |
+| GoFile no agrupa archivos | Sin cuenta guest reutilizada | Los archivos del mismo juego van juntos automáticamente |
 
 ---
 
-## 📄 Licencia
+## 📁 Estructura detallada
 
-MIT © 2025
+```
+main.py
+├── _es_firepaste()          # Detecta URLs de firepaste.com
+├── _scrape_firepaste()      # Scraper liviano (requests)
+├── scrape_url()             # Unifica scraping por sitio
+├── bot_publicar()           # Publica via API REST
+└── API (clase)
+    ├── escanear_url()
+    ├── generar_ia()
+    ├── publicar_post()
+    └── get/save config, historial, patrones
+
+uploader.py
+├── descargar_archivo()      # Descarga con progreso
+├── subir_gofile()           # Con/sin cuenta
+├── subir_mediafire()
+├── subir_mega()
+├── subir_drive()
+├── procesar_archivos()      # Orquesta todo
+├── build_tabla_resultados() # HTML con links de cloud
+└── build_tabla_directa()    # HTML con links originales
+```
+
+---
+
+<div align="center">
+
+**Hecho con** ☕ **café** y 🌿 **buena vibra**
+
+*Si te sirvió, dale una ⭐ al repo*
+
+[![GitHub stars](https://img.shields.io/github/stars/K-A-Y-R-U/firepaste-pywebview?style=social)](https://github.com/K-A-Y-R-U/firepaste-pywebview/stargazers)
+
+</div>
