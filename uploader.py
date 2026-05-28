@@ -53,9 +53,9 @@ def _resolver_url_real(url: str, log) -> str:
             except:
                 pass
 
-            # Esperar hasta 15s a que aparezca el botón "Download Now"
+            # Esperar hasta 30s a que aparezca el botón "Download Now"
             link_real = None
-            for _ in range(15):
+            for _ in range(30):
                 try:
                     # El botón tiene id="download-link" con el href real
                     el = page.query_selector("#download-link[href]")
@@ -64,6 +64,17 @@ def _resolver_url_real(url: str, log) -> str:
                         if link_real and ("statics.romsfun" in link_real or ext_re.search(link_real)):
                             log(f"✅ Link real obtenido: {link_real[:80]}...")
                             break
+                    # También buscar si el div #download-button ya es visible
+                    btn_div = page.query_selector("#download-button")
+                    if btn_div:
+                        style = btn_div.get_attribute("class") or ""
+                        if "hidden" not in style:
+                            el2 = btn_div.query_selector("a[href]")
+                            if el2:
+                                link_real = el2.get_attribute("href")
+                                if link_real and "statics.romsfun" in link_real:
+                                    log(f"✅ Link obtenido del botón: {link_real[:80]}...")
+                                    break
                 except:
                     pass
                 time.sleep(1)
