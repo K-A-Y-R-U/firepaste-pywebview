@@ -109,6 +109,36 @@ pip3 install --user pywebview requests beautifulsoup4 playwright
 python3 -m playwright install chromium
 ```
 
+### Instalación en Windows
+
+> La app fue desarrollada en Linux, pero puede correr en Windows con algunas dependencias adicionales.
+
+**1. Instala Python 3.10+**
+Descarga desde → https://www.python.org/downloads/windows/
+Durante la instalación marca ✅ **"Add Python to PATH"**
+
+**2. Instala las dependencias**
+Abre **PowerShell** o **CMD** y ejecuta:
+
+```powershell
+pip install pywebview requests beautifulsoup4 playwright
+python -m playwright install chromium
+```
+
+**3. Instala el runtime de WebKit para PyWebView**
+PyWebView en Windows usa Edge WebView2. Descárgalo desde:
+→ https://developer.microsoft.com/en-us/microsoft-edge/webview2/
+
+**4. Ejecuta la app**
+```powershell
+cd C:\ruta\a\firepaste-pywebview
+python main.py
+```
+
+> **Nota:** Los scripts `instalar.sh` y `abrir.sh` son solo para Linux. En Windows usa los comandos de arriba directamente.
+
+---
+
 ### Instalación manual (Ubuntu/Debian)
 
 ```bash
