@@ -561,6 +561,43 @@ class API:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    # ── Descargar archivos con estructura de carpetas ──
+    def descargar_juego(self, archivos: list, titulo: str, catalogo: str) -> dict:
+        """
+        Descarga los archivos organizándolos en:
+          ~/firepaste_downloads/<catalogo>/<titulo>/<archivo>
+        """
+        from uploader import descargar_archivo
+
+        def log(msg):
+            try:
+                if self._window:
+                    self._window.evaluate_js(
+                        f"window._logScrape && window._logScrape({json.dumps(msg)})"
+                    )
+            except: pass
+
+        resultados = []
+        def tarea():
+            for i, archivo in enumerate(archivos):
+                log(f"📦 [{i+1}/{len(archivos)}] {archivo['nombre']}")
+                ruta = descargar_archivo(
+                    archivo["url"], archivo["nombre"], log,
+                    titulo_juego=titulo,
+                    catalogo=catalogo
+                )
+                resultados.append({
+                    "nombre": archivo["nombre"],
+                    "ok": ruta is not None,
+                    "ruta": str(ruta) if ruta else ""
+                })
+            log(f"✅ Descarga completa — {sum(1 for r in resultados if r['ok'])}/{len(resultados)} archivos")
+
+        import threading
+        t = threading.Thread(target=tarea)
+        t.start(); t.join()
+        return {"ok": True, "resultados": resultados}
+
     # ── Escanear URL ────────────────────────
     def escanear_url(self, url: str):
         try:

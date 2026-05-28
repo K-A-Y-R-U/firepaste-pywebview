@@ -78,21 +78,41 @@ def _resolver_url_real(url: str, log) -> str:
     return url  # Fallback: devolver la URL original
 
 
-def descargar_archivo(url: str, nombre: str, log) -> Path | None:
-    """Descarga un archivo a la carpeta local, con barra de progreso."""
+def _limpiar_nombre(nombre: str) -> str:
+    """Limpia un nombre para usarlo como carpeta o archivo."""
+    limpio = "".join(c for c in nombre if c.isalnum() or c in " .-_()[]").strip()
+    return limpio or "sin_nombre"
+
+
+def descargar_archivo(url: str, nombre: str, log,
+                      titulo_juego: str = "", catalogo: str = "") -> Path | None:
+    """
+    Descarga un archivo organizándolo en:
+      ~/firepaste_downloads/<catalogo>/<titulo_juego>/<archivo>
+    Si no se pasan catalogo/titulo_juego, va directo a firepaste_downloads/.
+    """
     # Si la URL es una página con countdown, resolver el link real primero
     url = _resolver_url_real(url, log)
+
     # Limpiar nombre de archivo
-    nombre_limpio = "".join(c for c in nombre if c.isalnum() or c in " .-_()[]").strip()
-    if not nombre_limpio:
+    nombre_limpio = _limpiar_nombre(nombre)
+    if nombre_limpio == "sin_nombre":
         nombre_limpio = url.split("/")[-1].split("?")[0] or "archivo"
 
-    destino = DOWNLOAD_DIR / nombre_limpio
+    # Construir ruta con subcarpetas catalogo/titulo_juego
+    carpeta = DOWNLOAD_DIR
+    if catalogo:
+        carpeta = carpeta / _limpiar_nombre(catalogo)
+    if titulo_juego:
+        carpeta = carpeta / _limpiar_nombre(titulo_juego)
+    carpeta.mkdir(parents=True, exist_ok=True)
+
+    destino = carpeta / nombre_limpio
     if destino.exists():
-        log(f"⚡ Ya existe localmente: {nombre_limpio}")
+        log(f"⚡ Ya existe localmente: {destino}")
         return destino
 
-    log(f"⬇️  Descargando: {nombre_limpio}")
+    log(f"⬇️  Descargando: {nombre_limpio} → {carpeta}")
     try:
         headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
         r = requests.get(url, headers=headers, stream=True, timeout=60)
@@ -364,8 +384,12 @@ def procesar_archivos(archivos: list, config_cloud: dict, log) -> list:
     for i, archivo in enumerate(archivos):
         log(f"\n📦 [{i+1}/{len(archivos)}] {archivo['nombre']}")
 
-        # 1. Descargar
-        ruta_local = descargar_archivo(archivo["url"], archivo["nombre"], log)
+        # 1. Descargar con estructura de carpetas
+        ruta_local = descargar_archivo(
+            archivo["url"], archivo["nombre"], log,
+            titulo_juego=config_cloud.get("titulo_juego", ""),
+            catalogo=config_cloud.get("catalogo", "")
+        )
         if not ruta_local:
             resultados.append({
                 "nombre": archivo["nombre"],
