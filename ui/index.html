@@ -227,11 +227,30 @@
     <!-- TAB URL -->
     <div id="tab-url" class="tab-content active">
       <div class="url-bar">
-        <input type="text" id="inp-url" placeholder="https://myrient.abadox.com/files/..." />
+        <input type="text" id="inp-url" placeholder="https://romsfun.com/roms/..." onkeydown="if(event.key==='Enter')escanear()" />
         <button class="btn" onclick="escanear()">🔍 Escanear</button>
       </div>
 
-      <div id="chips-sitios" class="chips" style="margin-bottom:14px"></div>
+      <!-- Multi-URL toggle -->
+      <div style="margin-bottom:10px">
+        <button class="btn btn-sm" onclick="toggleMultiUrl()" id="btn-multi" style="font-size:11px;color:var(--text2)">
+          ➕ Múltiples URLs
+        </button>
+      </div>
+      <div id="multi-url-area" style="display:none;margin-bottom:12px">
+        <div class="field">
+          <label>URLs — una por línea</label>
+          <textarea id="inp-multi-urls" rows="5" placeholder="https://romsfun.com/roms/gba/game1.html&#10;https://romsfun.com/roms/gba/game2.html&#10;https://romsfun.com/roms/gba/game3.html"></textarea>
+          <div class="hint">El bot escaneará y publicará cada URL una por una automáticamente</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-green" style="flex:1" onclick="escanearMultiple()">⚡ Escanear y publicar todo</button>
+          <button class="btn btn-sm" onclick="toggleMultiUrl()">✕ Cancelar</button>
+        </div>
+        <div id="multi-progreso" style="display:none;margin-top:10px;background:var(--bg3);border-radius:8px;padding:10px;font-size:12px;color:var(--text2)"></div>
+      </div>
+
+      <div id="chips-sitios" class="chips" style="margin-bottom:6px"></div>
 
       <!-- Lista archivos -->
       <div class="field">
@@ -275,8 +294,9 @@
         <button class="btn" style="width:100%;justify-content:center;background:var(--blue)" onclick="publicarDirecto()">
           🚀 Publicar directo
         </button>
-
-
+        <button class="btn btn-primary full-btn" id="btn-publicar" onclick="publicar()" disabled>
+          ✅ Confirmar y publicar en Firepaste
+        </button>
       </div>
     </div>
 
@@ -359,10 +379,20 @@
       <div class="log-wrap" id="log-wrap"></div>
     </div>
 
-    <!-- Publicar -->
-    <button class="btn btn-primary full-btn" id="btn-publicar" onclick="publicar()" disabled>
-      🚀 Publicar en Firepaste
-    </button>
+  </div>
+</div>
+
+<!-- ══ MODAL LIMPIAR ══ -->
+<div class="modal-bg" id="modal-limpiar">
+  <div class="modal">
+    <h3>🗑️ Limpiar datos</h3>
+    <p style="color:var(--text2);font-size:13px;margin-bottom:18px">¿Qué quieres limpiar?</p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn" style="justify-content:flex-start" onclick="limpiarHistorial()">📋 Limpiar historial de posts</button>
+      <button class="btn" style="justify-content:flex-start" onclick="limpiarPatrones()">📊 Limpiar estadísticas</button>
+      <button class="btn" style="justify-content:flex-start;color:var(--red);border-color:var(--red)" onclick="limpiarTodo()">⚠️ Limpiar todo</button>
+    </div>
+    <div class="modal-btns"><button class="btn" onclick="cerrarModal('modal-limpiar')">Cancelar</button></div>
   </div>
 </div>
 
@@ -491,19 +521,16 @@ async function escanear() {
   archivos = result.archivos;
   log('ok', `✅ ${archivos.length} archivos encontrados`);
   renderArchivos(archivos);
-  // Rellenar título: primero usamos el título real extraído del HTML,
-  // si no hay, intentamos derivar algo del path de la URL.
+  // Siempre actualizar el título al re-escanear
   const inp = document.getElementById('inp-titulo-url');
-  if (!inp.value) {
-    if (result.titulo) {
-      inp.value = result.titulo;
-    } else {
-      try {
-        const partes = new URL(url).pathname.split('/').filter(Boolean);
-        const ultimo = decodeURIComponent(partes[partes.length-1]||'').replace(/[-_]/g,' ').replace(/\.[^.]+$/,'');
-        if (ultimo && !/^\d+$/.test(ultimo.trim())) inp.value = toTitleCase(ultimo);
-      } catch(e) {}
-    }
+  if (result.titulo) {
+    inp.value = result.titulo;
+  } else {
+    try {
+      const partes = new URL(url).pathname.split('/').filter(Boolean);
+      const ultimo = decodeURIComponent(partes[partes.length-1]||'').replace(/[-_]/g,' ').replace(/\.[^.]+$/,'');
+      if (ultimo && !/^\d+$/.test(ultimo.trim())) inp.value = toTitleCase(ultimo);
+    } catch(e) {}
   }
 }
 
@@ -809,6 +836,73 @@ function updatePublishedLabel(tab) {
 }
 
 function toTitleCase(s) { return s.replace(/\w\S*/g, t=>t[0].toUpperCase()+t.slice(1).toLowerCase()); }
+
+// ── Multi-URL ──
+function toggleMultiUrl() {
+  const area = document.getElementById('multi-url-area');
+  const btn  = document.getElementById('btn-multi');
+  const shown = area.style.display !== 'none';
+  area.style.display = shown ? 'none' : 'block';
+  btn.textContent = shown ? '➕ Múltiples URLs' : '✕ Ocultar';
+}
+
+async function escanearMultiple() {
+  const raw = document.getElementById('inp-multi-urls').value.trim();
+  if (!raw) { log('warn','⚠️ Ingresa al menos una URL'); return; }
+  const urls = raw.split('\n').map(u=>u.trim()).filter(u=>u.startsWith('http'));
+  if (!urls.length) { log('warn','⚠️ No se encontraron URLs válidas'); return; }
+
+  const cat = document.getElementById('inp-cat-url').value.trim();
+  if (!cat) { log('warn','⚠️ Selecciona un catálogo primero'); return; }
+
+  const progDiv = document.getElementById('multi-progreso');
+  progDiv.style.display = 'block';
+  let ok = 0; let fail = 0;
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    progDiv.innerHTML = `⏳ Procesando ${i+1}/${urls.length}: ${url.split('/').slice(-1)[0]}<br>✅ ${ok} publicados &nbsp; ❌ ${fail} errores`;
+    log('info', `📥 [${i+1}/${urls.length}] ${url}`);
+
+    // Escanear
+    document.getElementById('inp-url').value = url;
+    const result = await py('escanear_url', url);
+    if (!result || result.error || !result.archivos?.length) {
+      log('err', `❌ Sin archivos: ${url}`); fail++; continue;
+    }
+
+    // Generar tabla y publicar
+    const r = await py('generar_tabla_directa', result.archivos);
+    if (!r.ok) { log('err', `❌ Tabla: ${r.error}`); fail++; continue; }
+
+    const titulo = result.titulo || url.split('/').slice(-1)[0].replace(/-/g,' ');
+    const ia = await py('generar_ia', titulo, cat);
+
+    const datos = {
+      titulo:         ia.titulo || titulo,
+      pestana:        ia.pestana || 'ROM Download',
+      catalogo:       cat,
+      contenido_html: r.tabla_html,
+      is_vip:         document.getElementById('vip-url').checked,
+      is_published:   document.getElementById('published-url').checked,
+      sitio:          (() => { try { return new URL(url).hostname; } catch(e){ return ''; } })()
+    };
+
+    const pub = await py('publicar_post', datos);
+    if (pub.ok) {
+      log('ok', `✅ Publicado: ${ia.titulo}`); ok++;
+    } else {
+      log('err', `❌ Error publicando: ${pub.error}`); fail++;
+    }
+
+    // Pausa entre publicaciones
+    if (i < urls.length - 1) await new Promise(res => setTimeout(res, 1500));
+  }
+
+  progDiv.innerHTML = `🏁 Completado: ✅ ${ok} publicados &nbsp; ❌ ${fail} errores`;
+  log('ok', `🏁 Multi-URL terminado: ${ok}/${urls.length} publicados`);
+  await refrescarPatrones();
+}
 </script>
 
 </body>
