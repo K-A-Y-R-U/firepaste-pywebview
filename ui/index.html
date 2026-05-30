@@ -292,7 +292,7 @@
       <!-- Botones de acción paso a paso -->
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
         <button class="btn" style="width:100%;justify-content:center;background:var(--blue)" onclick="publicarDirecto()">
-          🚀 Publicar directo
+          🚀 Publicar directo (sin descargar)
         </button>
         <button class="btn btn-primary full-btn" id="btn-publicar" onclick="publicar()" disabled>
           ✅ Confirmar y publicar en Firepaste
@@ -921,9 +921,6 @@ async function escanearMultiple() {
 
     if (pub.ok) {
       log('ok', `✅ Publicado: ${tituloFinal}`); ok++;
-      // 3. Iniciar descarga física en background (no bloquea, no afecta la publicación)
-      log('info', `⬇️  Iniciando descarga en background → firepaste_downloads/${cat}/${tituloFinal}/`);
-      py('descargar_juego_background', result.archivos, tituloFinal, cat);
     } else {
       log('err', `❌ Error publicando "${tituloFinal}": ${pub.error}`); fail++;
     }
